@@ -133,9 +133,19 @@ This repository does not implement deployment infrastructure yet.
 - Whenever a non-trivial feature is completed, update `docs/agent/WORKLOG.md` and `docs/agent/NEXT_STEPS.md` in the same commit or PR.
 - Every meaningful change should follow the commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`.
 
+## Git Workflow
+
+For any meaningful multi-file change, the agent should provide these exact commands and should never claim it already pushed:
+
+```bash
+git status
+git add <paths>
+git commit -m "<type>(<scope>): message"
+git push
+```
+
 ## Next Steps
 
 - Build the structured evaluation pipeline around JSONL golden datasets.
 - Add deployment manifests once hosting is chosen.
 - Add integration tests against a staging Contextual datastore and WhatsApp sandbox.
-

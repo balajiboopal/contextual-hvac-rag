@@ -2,20 +2,24 @@
 
 ## Ingestion
 
-- [ ] Add the PDF metadata extraction module.
-- [ ] Add the ingestion CLI and JSONL ingest logging.
+- [x] Add the PDF metadata extraction module.
+- [x] Add the ingestion CLI and JSONL ingest logging.
 - [ ] Add sample test fixtures for PDF metadata heuristics.
+- [ ] Add integration coverage against the real Contextual ingest endpoint shape.
 
 ## Bot
 
-- [ ] Add the FastAPI WhatsApp webhook app.
-- [ ] Add store backends and inbound-only fee guard enforcement.
-- [ ] Add Meta Cloud API reply client.
+- [x] Add the FastAPI WhatsApp webhook app.
+- [x] Add store backends and inbound-only fee guard enforcement.
+- [x] Add Meta Cloud API reply client.
+- [ ] Add signature validation for Meta webhook requests if enabled for the app.
+- [ ] Add async queueing if webhook load grows beyond simple background tasks.
 
 ## Eval
 
-- [ ] Document JSONL golden dataset format.
+- [x] Document JSONL golden dataset format.
 - [ ] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
+- [ ] Add a CLI to run the golden dataset against the agent query API.
 
 ## Deployment
 

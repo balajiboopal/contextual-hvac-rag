@@ -51,7 +51,9 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 ## Directory Map
 
 - `src/contextual_hvac_rag/`: application code
+  - `ingest/`: unzip helper and PDF ingestion pipeline
+  - `metadata/`: PDF metadata extraction heuristics and flattening
+  - `bot_whatsapp/`: FastAPI app, webhook parsing, policy guards, Cloud API sender, and stores
 - `tests/`: test suite placeholders and basic unit tests
 - `eval/`: evaluation dataset planning artifacts
 - `docs/agent/`: agent context, worklog, decisions, and prioritized next steps
-
