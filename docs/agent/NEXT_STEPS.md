@@ -21,4 +21,4 @@
 
 - [ ] Add deployment notes for local tunneling and future cloud hosting.
 - [ ] Add CI checks for lint and tests.
-
+- [ ] Wire remote GitHub pushes from the local machine after reviewing staged changes.
