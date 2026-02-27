@@ -31,20 +31,20 @@ def validate_env() -> None:
 
 @app.command("unzip-dataset")
 def unzip_dataset(
-    zip_path: Path,
-    output_dir: Path = typer.Option(..., "--output-dir", file_okay=False, dir_okay=True),
+    zip_path: Path = typer.Option(..., "--zip-path", exists=True, dir_okay=False),
+    extract_dir: Path = typer.Option(..., "--extract-dir", file_okay=False, dir_okay=True),
 ) -> None:
     """Extract a ZIP archive to a local directory."""
 
     from contextual_hvac_rag.ingest.unzip_dataset import unzip_dataset_to_dir
 
-    unzip_dataset_to_dir(zip_path=zip_path, output_dir=output_dir)
-    typer.echo(f"Extracted {zip_path} -> {output_dir}")
+    unzip_dataset_to_dir(zip_path=zip_path, output_dir=extract_dir)
+    typer.echo(f"Extracted {zip_path} -> {extract_dir}")
 
 
 @app.command("ingest-pdfs")
 def ingest_pdfs(
-    pdf_dir: Path,
+    pdf_dir: Path = typer.Option(..., "--pdf-dir", exists=True, file_okay=False),
     source_label: str = typer.Option("upload", "--source-label"),
 ) -> None:
     """Ingest all PDFs in a directory into the configured Contextual datastore."""
@@ -64,4 +64,3 @@ def ingest_pdfs(
 
 if __name__ == "__main__":
     app()
-

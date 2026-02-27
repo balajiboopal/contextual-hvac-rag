@@ -4,8 +4,9 @@
 
 - [x] Add the PDF metadata extraction module.
 - [x] Add the ingestion CLI and JSONL ingest logging.
-- [ ] Add sample test fixtures for PDF metadata heuristics.
+- [x] Add sample test fixtures for PDF metadata heuristics.
 - [ ] Add integration coverage against the real Contextual ingest endpoint shape.
+- [ ] Add fixture PDFs for end-to-end extraction regression tests.
 
 ## Bot
 

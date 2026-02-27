@@ -101,9 +101,9 @@ class ContextualClient:
             "POST",
             f"/datastores/{self._settings.contextual_datastore_id}/documents",
             files={"file": (filename, file_bytes, "application/pdf")},
-            data={"custom_metadata": json.dumps(custom_metadata)},
+            data={"metadata": json.dumps({"custom_metadata": custom_metadata})},
         )
-        payload = self._parse_json(response)
+        payload = {} if not response.text.strip() else self._parse_json(response)
         document_id = payload.get("document_id") or payload.get("id")
         return IngestResult(
             status_code=response.status_code,
@@ -205,4 +205,3 @@ class ContextualClient:
         if not isinstance(payload, dict):
             raise ContextualClientError("Contextual API returned a non-object JSON payload.")
         return payload
-

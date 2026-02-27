@@ -12,7 +12,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 ## Architecture
 
 - CLI entry point: `contextual_hvac_rag.cli`
-- Ingestion path: local ZIP/PDFs -> metadata extraction -> Contextual datastore ingest
+- Ingestion path: local ZIP/PDFs -> metadata extraction -> metadata flattening -> Contextual datastore ingest
 - Bot path: Meta webhook -> inbound message parse -> Contextual agent query -> WhatsApp reply
 - Storage for bot state: in-memory (dev) or SQLite (local prod-ish)
 
@@ -20,6 +20,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 
 - No Colab-specific code.
 - No hardcoded secrets. Use environment variables only.
+- Local CLI usage is explicit: `unzip-dataset --zip-path ... --extract-dir ...` and `ingest-pdfs --pdf-dir ...`.
 - WhatsApp is inbound-only:
   - only respond to inbound user messages
   - no proactive outbound sends
@@ -52,7 +53,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 
 - `src/contextual_hvac_rag/`: application code
   - `ingest/`: unzip helper and PDF ingestion pipeline
-  - `metadata/`: PDF metadata extraction heuristics and flattening
+  - `metadata/`: faithful Colab-derived PDF metadata heuristics and flattening
   - `bot_whatsapp/`: FastAPI app, webhook parsing, policy guards, Cloud API sender, and stores
 - `tests/`: test suite placeholders and basic unit tests
 - `eval/`: evaluation dataset planning artifacts

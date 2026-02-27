@@ -1,39 +1,41 @@
-"""PDF metadata extraction utilities."""
+"""PDF metadata extraction utilities ported from the original Colab workflow."""
 
 from __future__ import annotations
 
 import hashlib
 import re
 from dataclasses import dataclass
-from typing import Iterable
 
 import fitz
 
-TYPE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("service manual", re.compile(r"\bservice\s+manual\b", re.IGNORECASE)),
-    ("installation manual", re.compile(r"\binstallation\s+manual\b", re.IGNORECASE)),
-    ("user manual", re.compile(r"\b(user|owner(?:'s)?)\s+manual\b", re.IGNORECASE)),
-    ("parts list", re.compile(r"\bparts?\s+(list|catalog)\b", re.IGNORECASE)),
-    ("wiring diagram", re.compile(r"\bwiring\s+diagram\b", re.IGNORECASE)),
+MONTHS = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+TYPE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("service manual", r"\bservice\s+manual\b"),
+    ("installation manual", r"\binstallation\s+manual\b"),
+    ("user manual", r"\buser\s+manual\b"),
+    ("technical bulletin", r"\btechnical\s+bulletin\b"),
+    ("troubleshooting guide", r"\btroubleshooting\b"),
+    ("specification", r"\bspec(ification)?s?\b"),
+    ("resource guide", r"\bresource\s+guide\b"),
+    ("report", r"\breport\b"),
+    ("guide", r"\bguide\b"),
 )
-VERSION_PATTERN = re.compile(
-    r"\b(?:version|ver(?:sion)?|rev(?:ision)?)\s*[:#-]?\s*([A-Z0-9][A-Z0-9._-]{0,24})",
-    re.IGNORECASE,
+EXCLUDE_TOC_HEADERS: tuple[str, ...] = (
+    r"\blist of figures\b",
+    r"\blist of tables\b",
 )
-DATE_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4}\b",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),
-    re.compile(r"\b\d{1,2}/\d{4}\b"),
-    re.compile(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b"),
-)
-DOT_LEADER_PATTERN = re.compile(r"\.{2,}\s*\d+\s*$")
-FALSE_POSITIVE_PATTERN = re.compile(
-    r"\b(contact|customer service|www\.|phone|email)\b",
-    re.IGNORECASE,
-)
+DOT_LEADER_COMPACT = re.compile(r"\.{2,}\s*\d{1,3}\s*$")
+DOT_LEADER_SPACED = re.compile(r"(?:\.\s*){6,}\d{1,3}\s*$")
+NUMBERED_WITH_PAGE = re.compile(r"^(\d+(\.\d+)*|[A-Z]\d*[\.\-]?)\s+.+\s(\d{1,3})\s*$")
+
+
+@dataclass(frozen=True, slots=True)
+class PageHit:
+    """A scored page hit for TOC or index detection."""
+
+    page: int
+    score: int
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,166 +43,268 @@ class ExtractedMetadata:
     """Normalized metadata derived from a PDF document."""
 
     doc_sha256: str
-    title: str
-    document_type: str
-    version: str
-    date: str
+    title: str | None
+    document_type: str | None
+    version: str | None
+    date: str | None
     source: str
-    toc_pages: tuple[int, ...]
-    index_pages: tuple[int, ...]
-    toc_preview: str
-    index_preview: str
+    toc: tuple[PageHit, ...]
+    index: tuple[PageHit, ...]
 
 
-def extract_pdf_metadata(pdf_bytes: bytes, *, source_label: str = "upload") -> ExtractedMetadata:
-    """Extract stable metadata from PDF bytes."""
+def extract_pdf_metadata(
+    pdf_bytes: bytes,
+    *,
+    source_label: str = "upload",
+    scan_first_pages: int = 25,
+    scan_last_pages: int = 25,
+    toc_threshold: int = 10,
+    index_threshold: int = 12,
+) -> ExtractedMetadata:
+    """Extract stable metadata from PDF bytes using the original heuristic flow."""
 
-    doc_sha256 = sha256_bytes(pdf_bytes)
     with fitz.open(stream=pdf_bytes, filetype="pdf") as document:
-        page_texts = [page.get_text("text") for page in document]
-        title = extract_title(document, page_texts)
-        front_matter = normalize_whitespace(" ".join(page_texts[: min(5, len(page_texts))]))
-        document_type = classify_document_type(front_matter)
-        version = extract_first_match(VERSION_PATTERN, front_matter)
-        date = extract_date(front_matter)
-        toc_pages = detect_reference_pages(page_texts, target="toc")
-        index_pages = detect_reference_pages(page_texts, target="index")
-        toc_preview = build_preview(page_texts, toc_pages)
-        index_preview = build_preview(page_texts, index_pages)
+        total_pages = len(document)
+        front_pages = list(range(min(total_pages, scan_first_pages)))
+        back_pages = list(range(max(0, total_pages - scan_last_pages), total_pages))
+
+        title: str | None = None
+        document_type: str | None = None
+        version: str | None = None
+        publication_date: str | None = None
+
+        for page_index in front_pages[:10]:
+            page = document[page_index]
+            text = page.get_text("text") or ""
+            text_lower = text.lower()
+
+            if page_index == 0:
+                title = extract_title_from_first_page(page) or title
+
+            if len(text.strip()) < 40:
+                continue
+
+            if document_type is None:
+                document_type = extract_type(text_lower)
+            if version is None:
+                version = extract_version(text)
+            if publication_date is None:
+                publication_date = extract_date(text)
+
+            if title and document_type and version and publication_date:
+                break
+
+        toc_hits: list[PageHit] = []
+        for page_index in front_pages:
+            text = document[page_index].get_text("text") or ""
+            if len(text.strip()) < 50:
+                continue
+            score = toc_score(text)
+            if score >= toc_threshold:
+                toc_hits.append(
+                    PageHit(page=page_index + 1, score=score, text=normalize_whitespace(text))
+                )
+
+        toc_hits.sort(key=lambda item: item.score, reverse=True)
+        toc_pages: tuple[PageHit, ...] = ()
+        if toc_hits:
+            best_page = toc_hits[0].page
+            nearby_hits = [hit for hit in toc_hits if abs(hit.page - best_page) <= 2]
+            toc_pages = tuple(dedupe_page_hits(sorted(nearby_hits, key=lambda item: item.page)))
+
+        index_hits: list[PageHit] = []
+        for page_index in back_pages:
+            text = document[page_index].get_text("text") or ""
+            if len(text.strip()) < 50:
+                continue
+            score = index_score(text)
+            if score >= index_threshold:
+                index_hits.append(
+                    PageHit(page=page_index + 1, score=score, text=normalize_whitespace(text))
+                )
+
+        index_hits.sort(key=lambda item: item.score, reverse=True)
+        index_pages: tuple[PageHit, ...] = ()
+        if index_hits:
+            best_page = index_hits[0].page
+            nearby_hits = [hit for hit in index_hits if abs(hit.page - best_page) <= 3]
+            index_pages = tuple(dedupe_page_hits(sorted(nearby_hits, key=lambda item: item.page)))
 
     return ExtractedMetadata(
-        doc_sha256=doc_sha256,
+        doc_sha256=compute_doc_id_from_bytes(pdf_bytes),
         title=title,
         document_type=document_type,
         version=version,
-        date=date,
+        date=publication_date,
         source=source_label,
-        toc_pages=toc_pages,
-        index_pages=index_pages,
-        toc_preview=toc_preview,
-        index_preview=index_preview,
+        toc=toc_pages,
+        index=index_pages,
     )
 
 
-def sha256_bytes(data: bytes) -> str:
-    """Return the SHA-256 digest for raw bytes."""
+def compute_doc_id_from_bytes(pdf_bytes: bytes) -> str:
+    """Return a stable document id using SHA-256 of the raw PDF bytes."""
 
-    return hashlib.sha256(data).hexdigest()
+    return hashlib.sha256(pdf_bytes).hexdigest()
 
 
-def extract_title(document: fitz.Document, page_texts: list[str]) -> str:
-    """Extract a best-effort title from the first page using large font spans."""
+def normalize_whitespace(value: str) -> str:
+    """Collapse repeated whitespace to a single space."""
 
-    if not document.page_count:
-        return "Untitled Document"
+    return re.sub(r"\s+", " ", value).strip()
 
-    first_page = document.load_page(0)
-    text_dict = first_page.get_text("dict")
+
+def dedupe_page_hits(items: list[PageHit]) -> list[PageHit]:
+    """Remove duplicate page hits while preserving the first occurrence."""
+
+    seen_pages: set[int] = set()
+    output: list[PageHit] = []
+    for item in items:
+        if item.page in seen_pages:
+            continue
+        output.append(item)
+        seen_pages.add(item.page)
+    return output
+
+
+def looks_like_contact_or_imprint(text_lower: str) -> bool:
+    """Detect contact-heavy pages so they are not mislabeled as TOC or index pages."""
+
+    email_count = len(re.findall(r"\b[\w\.-]+@[\w\.-]+\.\w+\b", text_lower))
+    url_count = len(re.findall(r"\bhttps?://|\bwww\.", text_lower))
+    phone_like_count = len(re.findall(r"\+\d|\bT\s*\+?\d|\bF\s*\+?\d", text_lower))
+    return (email_count + url_count + phone_like_count) >= 3
+
+
+def extract_title_from_first_page(page: fitz.Page) -> str | None:
+    """Infer a title from the first page by selecting the largest font spans."""
+
+    text_dict = page.get_text("dict")
     spans: list[tuple[float, str]] = []
     for block in text_dict.get("blocks", []):
         for line in block.get("lines", []):
             for span in line.get("spans", []):
                 text = normalize_whitespace(str(span.get("text", "")))
-                size = float(span.get("size", 0.0))
-                if text and len(text) > 3:
-                    spans.append((size, text))
+                if len(text) < 6:
+                    continue
+                spans.append((float(span.get("size", 0.0)), text))
 
-    if spans:
-        max_size = max(size for size, _ in spans)
-        title_parts: list[str] = []
-        for size, text in sorted(spans, key=lambda item: item[0], reverse=True):
-            if size < max_size - 0.3:
-                continue
-            if text not in title_parts:
-                title_parts.append(text)
-            if len(title_parts) == 3:
-                break
-        if title_parts:
-            return " ".join(title_parts)[:240]
+    if not spans:
+        return None
 
-    first_page_text = page_texts[0] if page_texts else ""
-    first_line = first_page_text.splitlines()[0].strip() if first_page_text else ""
-    return first_line[:240] if first_line else "Untitled Document"
+    spans.sort(reverse=True, key=lambda item: item[0])
+    top_size = spans[0][0]
+    title_parts = [text for size, text in spans if size >= top_size - 0.5][:3]
+    title = normalize_whitespace(" ".join(title_parts))
+    return title[:200] if title else None
 
 
-def classify_document_type(text: str) -> str:
-    """Infer the manual type from leading document text."""
+def extract_version(text: str) -> str | None:
+    """Extract a revision or version string from page text."""
+
+    patterns = (
+        r"\b(rev(?:ision)?\.?\s*[A-Z0-9]+)\b",
+        r"\b(version\s*\d+(\.\d+)*)\b",
+        r"\b(v\s*\d+(\.\d+)*)\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return normalize_whitespace(match.group(1))
+    return None
+
+
+def extract_date(text: str) -> str | None:
+    """Extract the first matching publication date from page text."""
+
+    month_year_match = re.search(rf"\b({MONTHS})\s+(19|20)\d{{2}}\b", text, re.IGNORECASE)
+    if month_year_match:
+        return normalize_whitespace(month_year_match.group(0))
+
+    year_match = re.search(r"\b(19|20)\d{2}\b", text)
+    if year_match:
+        return year_match.group(0)
+    return None
+
+
+def extract_type(text_lower: str) -> str | None:
+    """Infer the document type from the leading text."""
 
     for label, pattern in TYPE_PATTERNS:
-        if pattern.search(text):
+        if re.search(pattern, text_lower):
             return label
-    return "technical document"
+    return None
 
 
-def extract_first_match(pattern: re.Pattern[str], text: str) -> str:
-    """Return the first capture group for the given pattern, if present."""
+def toc_score(page_text: str) -> int:
+    """Return a TOC likelihood score for a page."""
 
-    match = pattern.search(text)
-    if not match:
-        return ""
-    return normalize_whitespace(match.group(1))
+    if not page_text:
+        return 0
 
+    lines = [line.strip() for line in page_text.splitlines() if line.strip()]
+    if len(lines) < 8:
+        return 0
 
-def extract_date(text: str) -> str:
-    """Return the first date-like string found in the document preamble."""
+    text_lower = page_text.lower()
+    if any(re.search(pattern, text_lower) for pattern in EXCLUDE_TOC_HEADERS):
+        return 0
+    if looks_like_contact_or_imprint(text_lower):
+        return 0
 
-    for pattern in DATE_PATTERNS:
-        match = pattern.search(text)
-        if match:
-            return normalize_whitespace(match.group(0))
-    return ""
+    header_score = 0
+    if re.search(r"\btable of contents\b", text_lower):
+        header_score += 10
+    elif re.search(r"^\s*contents?\s*$", text_lower, re.MULTILINE):
+        header_score += 8
+    elif re.search(r"^\s*content\s*$", text_lower, re.MULTILINE):
+        header_score += 7
+    elif "contents" in text_lower or "content" in text_lower:
+        header_score += 2
 
+    dot_leader_hits = 0
+    numbered_hits = 0
+    end_page_number_hits = 0
+    for line in lines:
+        if re.search(r"\s(\d{1,3})\s*$", line):
+            end_page_number_hits += 1
+        if DOT_LEADER_COMPACT.search(line) or DOT_LEADER_SPACED.search(line):
+            dot_leader_hits += 1
+        if NUMBERED_WITH_PAGE.match(line):
+            numbered_hits += 1
 
-def detect_reference_pages(page_texts: list[str], *, target: str) -> tuple[int, ...]:
-    """Detect likely table-of-contents or index pages using heuristic scoring."""
+    if dot_leader_hits + numbered_hits < 3:
+        return 0
 
-    if target not in {"toc", "index"}:
-        raise ValueError("target must be 'toc' or 'index'")
-
-    total_pages = len(page_texts)
-    if total_pages == 0:
-        return ()
-
-    if target == "toc":
-        candidate_indices = range(0, min(12, total_pages))
-        keywords = ("table of contents", "\ncontents\n", " contents ")
-    else:
-        start = max(total_pages - 12, 0)
-        candidate_indices = range(start, total_pages)
-        keywords = ("\nindex\n", " index ", "alphabetical")
-
-    scored_pages: list[tuple[int, int]] = []
-    for page_index in candidate_indices:
-        text = page_texts[page_index]
-        lowered = text.lower()
-        score = 0
-        if any(keyword in lowered for keyword in keywords):
-            score += 4
-        dot_leader_lines = sum(1 for line in text.splitlines() if DOT_LEADER_PATTERN.search(line))
-        score += min(dot_leader_lines, 5)
-        if FALSE_POSITIVE_PATTERN.search(text):
-            score -= 3
-        if target == "index" and re.search(r"\b[a-z]\s+\d+\b", lowered):
-            score += 1
-        if score >= 4:
-            scored_pages.append((page_index + 1, score))
-
-    return tuple(page for page, _ in sorted(scored_pages, key=lambda item: (-item[1], item[0]))[:3])
+    return header_score + (2 * dot_leader_hits) + (2 * numbered_hits) + end_page_number_hits
 
 
-def build_preview(page_texts: list[str], pages: Iterable[int]) -> str:
-    """Build a short preview snippet from the first detected page."""
+def index_score(page_text: str) -> int:
+    """Return an index likelihood score for a page."""
 
-    page_list = list(pages)
-    if not page_list:
-        return ""
-    page_number = page_list[0]
-    if page_number < 1 or page_number > len(page_texts):
-        return ""
-    return normalize_whitespace(page_texts[page_number - 1])[:280]
+    if not page_text:
+        return 0
 
+    lines = [line.strip() for line in page_text.splitlines() if line.strip()]
+    if len(lines) < 10:
+        return 0
 
-def normalize_whitespace(text: str) -> str:
-    """Collapse repeated whitespace to a single space."""
+    text_lower = page_text.lower()
+    if looks_like_contact_or_imprint(text_lower):
+        return 0
 
-    return re.sub(r"\s+", " ", text).strip()
+    header_score = 0
+    if re.search(r"^\s*index\s*$", text_lower, re.MULTILINE):
+        header_score += 10
+    elif "index" in text_lower:
+        header_score += 2
+
+    end_page_number_lines = 0
+    for line in lines:
+        if re.search(r"\s(\d{1,3})\s*$", line) and len(line) >= 8:
+            end_page_number_lines += 1
+
+    if end_page_number_lines < 5 and header_score < 10:
+        return 0
+
+    return header_score + end_page_number_lines

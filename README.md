@@ -11,7 +11,11 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
    pip install -e ".[dev]"
    ```
 
-3. Copy `.env.example` to `.env` and fill in required values.
+3. Copy `.env.example` to `.env` and fill in required values:
+
+   - `CONTEXTUAL_API_KEY`
+   - `CONTEXTUAL_DATASTORE_ID`
+   - optional `CONTEXTUAL_API_BASE` (defaults to `https://api.contextual.ai/v1`)
 4. Validate environment setup:
 
    ```bash
@@ -21,7 +25,7 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
 5. Run ingestion:
 
    ```bash
-   contextual-hvac-rag ingest-pdfs ./path/to/pdfs
+   contextual-hvac-rag ingest-pdfs --pdf-dir ./path/to/pdfs
    ```
 
 6. Run the WhatsApp webhook app locally:
@@ -87,13 +91,13 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
 ### Ingest a ZIP archive
 
 ```bash
-contextual-hvac-rag unzip-dataset ./Eval_Dataset.zip --output-dir ./data/eval_dataset
+contextual-hvac-rag unzip-dataset --zip-path ./Eval_Dataset.zip --extract-dir ./data/eval_dataset
 ```
 
 ### Ingest a PDF directory
 
 ```bash
-contextual-hvac-rag ingest-pdfs ./data/manuals --source-label upload
+contextual-hvac-rag ingest-pdfs --pdf-dir ./data/manuals --source-label upload
 ```
 
 ### Start the webhook
@@ -111,6 +115,14 @@ Configure your Meta webhook verification callback to `GET /whatsapp/webhook` and
 - WhatsApp replies are blocked: the fee guard only allows replies in direct response to inbound user messages.
 - Webhook verification fails: ensure `WA_VERIFY_TOKEN` matches the token configured in the Meta developer console.
 - SQLite store path errors: create the parent directory or set `BOT_SQLITE_PATH` to a writable location.
+
+## Migration Notes From Colab To Local
+
+- Changed: `google.colab.files.upload()` is removed. Use `--zip-path` and `--extract-dir` for local ZIP extraction, or `--pdf-dir` when PDFs are already extracted.
+- Changed: hardcoded Contextual credentials are removed. Use `.env` or exported environment variables.
+- Stayed the same: PDF metadata heuristics are preserved, including SHA-256 document ids, TOC dot-leader detection, back-page index scanning, and contact/imprint false-positive filtering.
+- Stayed the same: each PDF is uploaded with `custom_metadata` in the Contextual ingest request.
+- Local run path: unzip first if needed, then run `ingest-pdfs`, and inspect the JSONL log written under `./logs`.
 
 ## Safety / Secrets
 

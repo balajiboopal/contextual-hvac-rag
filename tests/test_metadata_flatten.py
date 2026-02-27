@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextual_hvac_rag.metadata.extractor import ExtractedMetadata
+from contextual_hvac_rag.metadata.extractor import ExtractedMetadata, PageHit
 from contextual_hvac_rag.metadata.flatten import flatten_metadata_for_contextual
 
 
@@ -14,10 +14,11 @@ def test_flatten_metadata_for_contextual() -> None:
         version="RevA",
         date="Jan 2026",
         source="upload",
-        toc_pages=(2, 3),
-        index_pages=(99,),
-        toc_preview="Contents preview",
-        index_preview="Index preview",
+        toc=(
+            PageHit(page=2, score=16, text="Contents preview"),
+            PageHit(page=3, score=14, text="More contents preview"),
+        ),
+        index=(PageHit(page=99, score=18, text="Index preview"),),
     )
 
     flattened = flatten_metadata_for_contextual(metadata)
@@ -26,4 +27,5 @@ def test_flatten_metadata_for_contextual() -> None:
     assert flattened["type"] == "service manual"
     assert flattened["toc_pages"] == "2,3"
     assert flattened["index_pages"] == "99"
+    assert flattened["toc_preview"] == "Contents preview"
 
