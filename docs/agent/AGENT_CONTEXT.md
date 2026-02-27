@@ -44,6 +44,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 
 ## HTTP Endpoints
 
+- `GET /healthz`
 - `POST /datastores/{DATASTORE_ID}/documents`
 - `POST /agents/{AGENT_ID}/query`
 - `GET /whatsapp/webhook`
@@ -58,3 +59,4 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - `tests/`: test suite placeholders and basic unit tests
 - `eval/`: evaluation dataset planning artifacts
 - `docs/agent/`: agent context, worklog, decisions, and prioritized next steps
+- `docs/whatsapp_test_number_setup.md`: practical sandbox setup guide for Meta's test number

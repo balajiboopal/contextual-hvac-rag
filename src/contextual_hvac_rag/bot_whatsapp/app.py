@@ -49,6 +49,22 @@ def shutdown_event() -> None:
     WHATSAPP_API.close()
 
 
+@app.get("/healthz")
+def healthcheck() -> JSONResponse:
+    """Return a simple readiness snapshot for local setup validation."""
+
+    return JSONResponse(
+        content={
+            "status": "ok",
+            "bot_store_backend": SETTINGS.bot_store_backend,
+            "contextual_agent_configured": bool(SETTINGS.contextual_agent_id),
+            "wa_verify_token_configured": SETTINGS.wa_verify_token is not None,
+            "wa_access_token_configured": SETTINGS.wa_access_token is not None,
+            "wa_phone_number_id_configured": bool(SETTINGS.wa_phone_number_id),
+        }
+    )
+
+
 @app.get("/whatsapp/webhook")
 def verify_webhook(
     hub_mode: Annotated[str | None, Query(alias="hub.mode")] = None,

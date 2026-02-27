@@ -108,6 +108,14 @@ uvicorn contextual_hvac_rag.bot_whatsapp.app:app --host 0.0.0.0 --port 8000
 
 Configure your Meta webhook verification callback to `GET /whatsapp/webhook` and message delivery to `POST /whatsapp/webhook`.
 
+Validate local bot readiness before configuring Meta:
+
+```bash
+curl http://127.0.0.1:8000/healthz
+```
+
+For a step-by-step Meta sandbox setup using the WhatsApp test number, see `docs/whatsapp_test_number_setup.md`.
+
 ## Troubleshooting
 
 - `validate-env` reports missing variables: update `.env` and restart the shell.
@@ -115,6 +123,7 @@ Configure your Meta webhook verification callback to `GET /whatsapp/webhook` and
 - WhatsApp replies are blocked: the fee guard only allows replies in direct response to inbound user messages.
 - Webhook verification fails: ensure `WA_VERIFY_TOKEN` matches the token configured in the Meta developer console.
 - SQLite store path errors: create the parent directory or set `BOT_SQLITE_PATH` to a writable location.
+- `/healthz` shows `*_configured: false`: fill in the missing WhatsApp or Contextual bot variables in `.env` and restart the app.
 
 ## Migration Notes From Colab To Local
 

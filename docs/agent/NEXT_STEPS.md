@@ -14,6 +14,7 @@
 - [x] Add the FastAPI WhatsApp webhook app.
 - [x] Add store backends and inbound-only fee guard enforcement.
 - [x] Add Meta Cloud API reply client.
+- [x] Add local readiness checks and test-number setup docs.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.
 
