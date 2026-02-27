@@ -35,13 +35,21 @@ class Settings(BaseSettings):
     ingest_log_dir: Path = Path("./logs")
 
     def missing_contextual_vars(self) -> list[str]:
-        """Return required Contextual variables that are not configured."""
+        """Return Contextual variables required for datastore ingestion."""
 
         missing: list[str] = []
         if self.contextual_api_key is None:
             missing.append("CONTEXTUAL_API_KEY")
         if not self.contextual_datastore_id:
             missing.append("CONTEXTUAL_DATASTORE_ID")
+        return missing
+
+    def missing_contextual_agent_vars(self) -> list[str]:
+        """Return Contextual variables required for agent queries."""
+
+        missing: list[str] = []
+        if self.contextual_api_key is None:
+            missing.append("CONTEXTUAL_API_KEY")
         if not self.contextual_agent_id:
             missing.append("CONTEXTUAL_AGENT_ID")
         return missing
@@ -77,4 +85,3 @@ def get_settings() -> Settings:
     """Return a cached settings object."""
 
     return Settings()
-

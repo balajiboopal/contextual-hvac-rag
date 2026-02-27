@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Fixed ingestion settings validation so `ingest-pdfs` only requires datastore credentials, not `CONTEXTUAL_AGENT_ID`.
 - Refined the ingestion refactor to more closely match the original Colab notebook: explicit local-path CLI flags, faithful TOC/index heuristics, and the original Contextual ingest metadata payload shape.
 - Added targeted tests for TOC/index scoring and updated the metadata flattening tests for the page-hit model.
 - Added the ingestion modules for ZIP extraction, PDF metadata heuristics, Contextual datastore uploads, and JSONL ingest logging.

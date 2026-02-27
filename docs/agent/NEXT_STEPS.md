@@ -7,6 +7,7 @@
 - [x] Add sample test fixtures for PDF metadata heuristics.
 - [ ] Add integration coverage against the real Contextual ingest endpoint shape.
 - [ ] Add fixture PDFs for end-to-end extraction regression tests.
+- [ ] Add separate `validate-env` scopes for ingest vs bot so optional variables are reported more clearly.
 
 ## Bot
 
