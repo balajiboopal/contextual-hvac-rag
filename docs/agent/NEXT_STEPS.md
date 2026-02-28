@@ -25,8 +25,9 @@
 ## Eval
 
 - [x] Document JSONL golden dataset format.
-- [ ] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
+- [x] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
 - [ ] Add a CLI to run the golden dataset against the agent query API.
+- [ ] Add retrieval normalization and JSONL/JSON writers for per-query results.
 
 ## Deployment
 
