@@ -95,6 +95,7 @@ def _evaluate_single_row(
 
     started_at = time.perf_counter()
     error_message: str | None = None
+    error_type: str | None = None
     answer_text = ""
     retrieval_items: list[NormalizedRetrievalItem] = []
     latencies: dict[str, float | None]
@@ -111,6 +112,7 @@ def _evaluate_single_row(
         elapsed_ms = (time.perf_counter() - started_at) * 1000.0
         latencies = extract_latency_ms(payload={}, total_elapsed_ms=elapsed_ms)
         error_message = str(exc)
+        error_type = type(exc).__name__
         LOGGER.exception("Evaluation query failed for row %s", row.row_index)
 
     doc_relevances, page_grades, page_binary = _compute_relevance_lists(
@@ -137,7 +139,8 @@ def _evaluate_single_row(
             "rerank": latencies["rerank"],
             "generate": latencies["generate"],
         },
-        "error": error_message,
+        "error_type": error_type,
+        "error_message": error_message,
     }
 
     for k in ks:
@@ -186,6 +189,7 @@ def build_summary(artifacts: list[QueryEvaluationArtifact]) -> dict[str, Any]:
     return {
         "retrieval": overall,
         "by_difficulty": by_difficulty,
+        "by_gold_sources": by_source,
         "by_gold_source": by_source,
         "latency_ms": latency_summary,
         "index_stats": {
@@ -263,6 +267,7 @@ def _aggregate_metrics(records: list[dict[str, Any]], *, ks: tuple[int, ...]) ->
 
 
 def _print_console_summary(*, summary: dict[str, Any], total_queries: int, out_dir: Path) -> None:
+    by_source = summary.get("by_gold_sources", {})
     typer.echo(f"Evaluated {total_queries} questions")
     typer.echo("")
     typer.echo("Metric               DOC       PAGE")
@@ -273,5 +278,6 @@ def _print_console_summary(*, summary: dict[str, Any], total_queries: int, out_d
         page_value = retrieval["page"].get(metric_key, 0.0)
         typer.echo(f"{metric_key:<18} {doc_value:>5.3f}     {page_value:>5.3f}")
     typer.echo("")
+    typer.echo(f"Per-PDF breakdowns: {len(by_source)}")
     typer.echo(f"Per-query JSONL: {out_dir / 'per_query_results.jsonl'}")
     typer.echo(f"Summary JSON:    {out_dir / 'summary.json'}")

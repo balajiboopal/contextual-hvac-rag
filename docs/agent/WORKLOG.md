@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Aligned evaluation output keys with the requested schema by adding explicit error fields and a `by_gold_sources` summary map.
 - Hardened evaluation retrieval normalization to search nested metadata fields and added unit coverage for that payload shape.
 - Wired the evaluation pipeline into the top-level CLI and replaced the eval placeholder docs with runnable instructions and metric definitions.
 - Added the evaluation runner, retrieval normalization, JSON writers, and offline summary generation against a golden CSV dataset.

@@ -42,11 +42,11 @@ The command writes:
 
 - `per_query_results.jsonl`
   - one JSON object per question
-  - includes answer text, normalized retrieval items, hit flags, MRR, nDCG, latency, and any error
+  - includes answer text, normalized retrieval items, hit flags, MRR, nDCG, latency, and explicit `error_type` / `error_message` fields on failures
 - `summary.json`
   - overall metrics
   - breakdown by difficulty
-  - breakdown by `gold_sources`
+  - breakdown by `gold_sources` (under `by_gold_sources`)
   - latency summaries
   - best-effort index stats (currently `not_available`)
 
