@@ -6,7 +6,9 @@ import re
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]\([^)]*\)")
 MARKDOWN_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*$")
+STAR_HEADING_PATTERN = re.compile(r"^\*{1,2}(.+?)\*{1,2}$")
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\|?\s*[:\-| ]+\|?\s*$")
+LEADING_BULLET_PATTERN = re.compile(r"^(?:[.\-•·●▪]|â€¢)\s+")
 
 
 def format_for_whatsapp(text: str) -> str:
@@ -24,7 +26,7 @@ def format_for_whatsapp(text: str) -> str:
         line = raw_line.strip()
         if not line:
             if pending_table_header:
-                output_lines.append(f"*{pending_table_header}*")
+                _append_heading(output_lines, pending_table_header)
                 pending_table_header = None
                 in_table_body = False
             if output_lines and output_lines[-1] != "":
@@ -34,21 +36,29 @@ def format_for_whatsapp(text: str) -> str:
         heading_match = MARKDOWN_HEADING_PATTERN.match(line)
         if heading_match:
             if pending_table_header:
-                output_lines.append(f"*{pending_table_header}*")
+                _append_heading(output_lines, pending_table_header)
                 pending_table_header = None
                 in_table_body = False
-            output_lines.append(f"*{heading_match.group(1).strip()}*")
+            _append_heading(output_lines, heading_match.group(1).strip())
             continue
 
-        if line.startswith("|") and line.endswith("|"):
+        star_heading_match = STAR_HEADING_PATTERN.match(line)
+        if star_heading_match:
+            if pending_table_header:
+                _append_heading(output_lines, pending_table_header)
+                pending_table_header = None
+                in_table_body = False
+            _append_heading(output_lines, star_heading_match.group(1).strip())
+            continue
+
+        if "|" in line and (line.startswith("|") or line.endswith("|")):
             cells = [cell.strip() for cell in line.strip("|").split("|")]
             cells = [cell for cell in cells if cell]
             if not cells:
                 continue
             if TABLE_SEPARATOR_PATTERN.match(line):
                 if pending_table_header:
-                    output_lines.append(f"*{pending_table_header}*")
-                    output_lines.append("")
+                    _append_heading(output_lines, pending_table_header)
                     pending_table_header = None
                 in_table_body = True
                 continue
@@ -63,15 +73,18 @@ def format_for_whatsapp(text: str) -> str:
             continue
 
         if pending_table_header:
-            output_lines.append(f"*{pending_table_header}*")
-            output_lines.append("")
+            _append_heading(output_lines, pending_table_header)
             pending_table_header = None
         in_table_body = False
 
-        output_lines.append(_normalize_bullets(line))
+        normalized_line = _normalize_bullets(line)
+        if _is_heading_like(normalized_line):
+            _append_heading(output_lines, normalized_line.rstrip(":"))
+            continue
+        output_lines.append(normalized_line)
 
     if pending_table_header:
-        output_lines.append(f"*{pending_table_header}*")
+        _append_heading(output_lines, pending_table_header)
 
     return _collapse_blank_lines(output_lines)
 
@@ -79,11 +92,35 @@ def format_for_whatsapp(text: str) -> str:
 def _normalize_bullets(line: str) -> str:
     """Normalize a single line for WhatsApp display."""
 
-    if line.startswith("✓"):
-        return f"- {line.lstrip('✓').strip()}"
-    if line.startswith("- [ ]"):
-        return f"- {line[5:].strip()}"
-    return line
+    stripped = line.strip().strip("|").strip()
+    if " | " in stripped:
+        stripped = " - ".join(part.strip() for part in stripped.split("|") if part.strip())
+    if stripped.startswith("✓") or stripped.startswith("âœ“"):
+        return f"- {stripped.lstrip('✓âœ“').strip()}"
+    if stripped.startswith("- [ ]"):
+        return f"- {stripped[5:].strip()}"
+    if LEADING_BULLET_PATTERN.match(stripped):
+        return f"- {LEADING_BULLET_PATTERN.sub('', stripped).strip()}"
+    return stripped
+
+
+def _is_heading_like(line: str) -> bool:
+    """Return whether a line reads like a section heading."""
+
+    if not line or line.startswith("- ") or re.match(r"^\d+\.\s+", line):
+        return False
+    if len(line) > 90:
+        return False
+    return line.endswith(":")
+
+
+def _append_heading(output_lines: list[str], heading_text: str) -> None:
+    """Append a heading with clear visual separation."""
+
+    if output_lines and output_lines[-1] != "":
+        output_lines.append("")
+    output_lines.append(f"*{heading_text.strip()}*")
+    output_lines.append("")
 
 
 def _collapse_blank_lines(lines: list[str]) -> str:

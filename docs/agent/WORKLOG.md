@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Improved WhatsApp reply formatting to better handle malformed table rows, mojibake bullets, and heading spacing so chat output reads more naturally.
 - Aligned evaluation output keys with the requested schema by adding explicit error fields and a `by_gold_sources` summary map.
 - Hardened evaluation retrieval normalization to search nested metadata fields and added unit coverage for that payload shape.
 - Wired the evaluation pipeline into the top-level CLI and replaced the eval placeholder docs with runnable instructions and metric definitions.
