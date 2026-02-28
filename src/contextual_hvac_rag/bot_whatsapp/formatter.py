@@ -9,6 +9,7 @@ MARKDOWN_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 STAR_HEADING_PATTERN = re.compile(r"^\*{1,2}(.+?)\*{1,2}$")
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\|?\s*[:\-| ]+\|?\s*$")
 LEADING_BULLET_PATTERN = re.compile(r"^(?:[.\-•·●▪]|â€¢)\s+")
+STAR_TOKEN_PATTERN = re.compile(r"\*{1,2}([^*]+?)\*{1,2}")
 
 
 def format_for_whatsapp(text: str) -> str:
@@ -40,6 +41,15 @@ def format_for_whatsapp(text: str) -> str:
                 pending_table_header = None
                 in_table_body = False
             _append_heading(output_lines, heading_match.group(1).strip())
+            continue
+
+        special_heading = _extract_tableish_heading(line)
+        if special_heading:
+            if pending_table_header:
+                _append_heading(output_lines, pending_table_header)
+                pending_table_header = None
+                in_table_body = False
+            _append_heading(output_lines, special_heading)
             continue
 
         star_heading_match = STAR_HEADING_PATTERN.match(line)
@@ -78,6 +88,10 @@ def format_for_whatsapp(text: str) -> str:
         in_table_body = False
 
         normalized_line = _normalize_bullets(line)
+        structured_rows = _format_task_style_row(normalized_line)
+        if structured_rows is not None:
+            output_lines.extend(structured_rows)
+            continue
         if _is_heading_like(normalized_line):
             _append_heading(output_lines, normalized_line.rstrip(":"))
             continue
@@ -121,6 +135,56 @@ def _append_heading(output_lines: list[str], heading_text: str) -> None:
         output_lines.append("")
     output_lines.append(f"*{heading_text.strip()}*")
     output_lines.append("")
+
+
+def _extract_tableish_heading(line: str) -> str | None:
+    """Convert a table-style header row into a single section heading."""
+
+    star_tokens = [token.strip() for token in STAR_TOKEN_PATTERN.findall(line) if token.strip()]
+    if len(star_tokens) >= 2:
+        heading = star_tokens[0]
+        if heading.casefold().endswith(" task"):
+            heading = f"{heading}s"
+        return heading
+
+    if " - " not in line:
+        return None
+    parts = [part.strip() for part in line.split(" - ") if part.strip()]
+    if len(parts) != 2:
+        return None
+    left, right = parts
+    right_normalized = right.casefold().replace("/", " ")
+    if "frequency" in right_normalized or "description" in right_normalized or "details" in right_normalized:
+        heading = left
+        if heading.casefold().endswith(" task"):
+            heading = f"{heading}s"
+        return heading
+    return None
+
+
+def _format_task_style_row(line: str) -> list[str] | None:
+    """Convert a task-style row into a bullet title plus detail line."""
+
+    if " - " not in line:
+        return None
+    if line.startswith("- ") or re.match(r"^\d+\.\s+", line):
+        return None
+
+    parts = [part.strip() for part in line.split(" - ") if part.strip()]
+    if len(parts) < 2:
+        return None
+
+    title = parts[0]
+    if len(title) > 50:
+        return None
+
+    if title.casefold() in {"task", "maintenance task", "frequency/description"}:
+        return None
+
+    detail = ". ".join(parts[1:])
+    if not detail.endswith((".", "!", "?")):
+        detail = f"{detail}."
+    return [f"- {title}", f"  {detail}"]
 
 
 def _collapse_blank_lines(lines: list[str]) -> str:

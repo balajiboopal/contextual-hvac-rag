@@ -31,3 +31,19 @@ def test_format_for_whatsapp_rewrites_markdown_tables_and_citations() -> None:
     assert "*Energy Efficiency Recommendations:*" in formatted
     assert "[5]()" not in formatted
     assert "| --- |" not in formatted
+
+
+def test_format_for_whatsapp_converts_task_table_rows_into_chat_bullets() -> None:
+    source_text = """
+    *Maintenance Task* - *Frequency/Description*
+    Air Filter Cleaning - Every 2 weeks or as needed - Clean using vacuum cleaner or wash with lukewarm water and mild detergent
+    Condenser Coil Wash - At least once a year to maximize efficiency and enhance AC working life
+    """
+
+    formatted = format_for_whatsapp(source_text)
+
+    assert "*Maintenance Tasks*" in formatted
+    assert "- Air Filter Cleaning" in formatted
+    assert "  Every 2 weeks or as needed. Clean using vacuum cleaner or wash with lukewarm water and mild detergent." in formatted
+    assert "- Condenser Coil Wash" in formatted
+    assert "*Maintenance Task* - *Frequency/Description*" not in formatted
