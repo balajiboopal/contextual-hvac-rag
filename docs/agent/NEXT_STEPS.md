@@ -16,7 +16,8 @@
 - [x] Add Meta Cloud API reply client.
 - [x] Add local readiness checks and test-number setup docs.
 - [x] Add fallback to the ACL query endpoint when the agent requires it.
-- [ ] Confirm the exact nested `messages[*].content` schema against the live Contextual API and add an integration test.
+- [x] Confirm the top-level live response shape and support nested response extraction.
+- [ ] Add an integration test that locks the known Contextual agent response schema.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.
 

@@ -152,12 +152,7 @@ class ContextualClient:
                 json=body,
             )
         payload = self._parse_json(response)
-        answer_text = (
-            payload.get("answer")
-            or payload.get("output_text")
-            or payload.get("response")
-            or ""
-        )
+        answer_text = self._extract_agent_answer_text(payload)
         returned_conversation_id = payload.get("conversation_id")
         return AgentQueryResult(
             status_code=response.status_code,
@@ -225,3 +220,30 @@ class ContextualClient:
         if not isinstance(payload, dict):
             raise ContextualClientError("Contextual API returned a non-object JSON payload.")
         return payload
+
+    @staticmethod
+    def _extract_agent_answer_text(payload: dict[str, Any]) -> str:
+        """Extract the assistant response text from known Contextual payload shapes."""
+
+        direct_fields = (
+            payload.get("answer"),
+            payload.get("output_text"),
+            payload.get("response"),
+        )
+        for value in direct_fields:
+            if isinstance(value, str) and value.strip():
+                return value
+
+        outputs = payload.get("outputs")
+        if isinstance(outputs, dict):
+            response_value = outputs.get("response")
+            if isinstance(response_value, str) and response_value.strip():
+                return response_value
+
+        message = payload.get("message")
+        if isinstance(message, dict):
+            content_value = message.get("content")
+            if isinstance(content_value, str) and content_value.strip():
+                return content_value
+
+        return ""

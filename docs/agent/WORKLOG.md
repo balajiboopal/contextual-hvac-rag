@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Updated agent response parsing to extract answer text from the live Contextual payload shape (`outputs.response` and `message.content`).
 - Added automatic fallback from `/query` to `/query/acl` when the Contextual agent reports ACL is active.
 - Fixed the Contextual agent query request shape to use `messages` instead of `message`, based on live API validation feedback.
 - Added a `/healthz` endpoint for local WhatsApp bot readiness checks and a dedicated Meta test-number setup guide.
