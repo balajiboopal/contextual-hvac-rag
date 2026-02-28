@@ -15,6 +15,7 @@
 - [x] Add store backends and inbound-only fee guard enforcement.
 - [x] Add Meta Cloud API reply client.
 - [x] Add local readiness checks and test-number setup docs.
+- [x] Add fallback to the ACL query endpoint when the agent requires it.
 - [ ] Confirm the exact nested `messages[*].content` schema against the live Contextual API and add an integration test.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.

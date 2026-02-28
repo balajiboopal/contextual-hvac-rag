@@ -133,11 +133,24 @@ class ContextualClient:
         if conversation_id:
             body["conversation_id"] = conversation_id
 
-        response = self._request_with_retries(
-            "POST",
-            f"/agents/{self._settings.contextual_agent_id}/query",
-            json=body,
-        )
+        try:
+            response = self._request_with_retries(
+                "POST",
+                f"/agents/{self._settings.contextual_agent_id}/query",
+                json=body,
+            )
+        except ContextualAPIResponseError as exc:
+            if "ACL is active" not in exc.body:
+                raise
+            LOGGER.info(
+                "Agent %s requires ACL query endpoint; retrying with /query/acl.",
+                self._settings.contextual_agent_id,
+            )
+            response = self._request_with_retries(
+                "POST",
+                f"/agents/{self._settings.contextual_agent_id}/query/acl",
+                json=body,
+            )
         payload = self._parse_json(response)
         answer_text = (
             payload.get("answer")

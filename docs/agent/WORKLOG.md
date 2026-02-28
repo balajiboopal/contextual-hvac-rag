@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added automatic fallback from `/query` to `/query/acl` when the Contextual agent reports ACL is active.
 - Fixed the Contextual agent query request shape to use `messages` instead of `message`, based on live API validation feedback.
 - Added a `/healthz` endpoint for local WhatsApp bot readiness checks and a dedicated Meta test-number setup guide.
 - Fixed ingestion settings validation so `ingest-pdfs` only requires datastore credentials, not `CONTEXTUAL_AGENT_ID`.
