@@ -29,6 +29,7 @@
 - [x] Add a CLI-ready runner to execute the golden dataset against the agent query API.
 - [x] Add retrieval normalization and JSONL/JSON writers for per-query results.
 - [x] Wire the new eval runner into the top-level Typer CLI.
+- [x] Improve retrieval normalization for nested metadata payloads.
 - [ ] Add a sample golden CSV fixture and an integration smoke test for the full eval command.
 
 ## Deployment
