@@ -17,6 +17,7 @@
 - [x] Add local readiness checks and test-number setup docs.
 - [x] Add fallback to the ACL query endpoint when the agent requires it.
 - [x] Confirm the top-level live response shape and support nested response extraction.
+- [x] Persist attribution payloads for later evaluation and normalize replies for WhatsApp display.
 - [ ] Add an integration test that locks the known Contextual agent response schema.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.

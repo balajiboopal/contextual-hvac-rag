@@ -28,6 +28,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
   - no scheduled outbound jobs
   - if user is inactive for more than 24 hours, do not send anything until the user messages again
 - Continue PDF ingestion on per-file failures and write JSONL ingest logs.
+- Successful WhatsApp agent responses are persisted to `logs/whatsapp_agent_events.jsonl` with `attributions` and `retrieval_contents`.
 
 ## Key Environment Variables
 
@@ -55,7 +56,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - `src/contextual_hvac_rag/`: application code
   - `ingest/`: unzip helper and PDF ingestion pipeline
   - `metadata/`: faithful Colab-derived PDF metadata heuristics and flattening
-  - `bot_whatsapp/`: FastAPI app, webhook parsing, policy guards, Cloud API sender, and stores
+  - `bot_whatsapp/`: FastAPI app, webhook parsing, policy guards, Cloud API sender, event logging, and reply formatting
 - `tests/`: test suite placeholders and basic unit tests
 - `eval/`: evaluation dataset planning artifacts
 - `docs/agent/`: agent context, worklog, decisions, and prioritized next steps

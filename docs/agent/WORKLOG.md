@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added WhatsApp-friendly response formatting and persistent JSONL logging of `attributions` / `retrieval_contents` for later evaluation.
 - Updated agent response parsing to extract answer text from the live Contextual payload shape (`outputs.response` and `message.content`).
 - Added automatic fallback from `/query` to `/query/acl` when the Contextual agent reports ACL is active.
 - Fixed the Contextual agent query request shape to use `messages` instead of `message`, based on live API validation feedback.

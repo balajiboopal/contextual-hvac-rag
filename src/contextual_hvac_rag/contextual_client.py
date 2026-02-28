@@ -44,7 +44,10 @@ class AgentQueryResult:
 
     status_code: int
     conversation_id: str | None
+    message_id: str | None
     answer_text: str
+    attributions: list[dict[str, Any]]
+    retrieval_contents: list[dict[str, Any]]
     payload: dict[str, Any]
 
 
@@ -154,6 +157,7 @@ class ContextualClient:
         payload = self._parse_json(response)
         answer_text = self._extract_agent_answer_text(payload)
         returned_conversation_id = payload.get("conversation_id")
+        returned_message_id = payload.get("message_id")
         return AgentQueryResult(
             status_code=response.status_code,
             conversation_id=(
@@ -161,7 +165,14 @@ class ContextualClient:
                 if returned_conversation_id is not None
                 else conversation_id
             ),
+            message_id=(
+                str(returned_message_id)
+                if returned_message_id is not None
+                else None
+            ),
             answer_text=str(answer_text),
+            attributions=self._extract_dict_list(payload.get("attributions")),
+            retrieval_contents=self._extract_dict_list(payload.get("retrieval_contents")),
             payload=payload,
         )
 
@@ -247,3 +258,11 @@ class ContextualClient:
                 return content_value
 
         return ""
+
+    @staticmethod
+    def _extract_dict_list(value: Any) -> list[dict[str, Any]]:
+        """Return only dictionary items from a list-like payload field."""
+
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]

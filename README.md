@@ -82,6 +82,8 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
 - `src/contextual_hvac_rag/metadata/`: PDF metadata extraction and metadata flattening.
 - `src/contextual_hvac_rag/ingest/`: unzip helper and PDF ingestion pipeline.
 - `src/contextual_hvac_rag/bot_whatsapp/`: FastAPI webhook, stores, guardrails, and Meta Cloud API sender.
+  - Replies are normalized into WhatsApp-friendly plain text before sending.
+  - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.
 - `src/contextual_hvac_rag/cli.py`: Typer entry point.
 - `eval/`: placeholder evaluation dataset docs and sample JSONL.
 - `docs/agent/`: source-of-truth docs for future agent-assisted changes.
@@ -124,6 +126,7 @@ For a step-by-step Meta sandbox setup using the WhatsApp test number, see `docs/
 - Webhook verification fails: ensure `WA_VERIFY_TOKEN` matches the token configured in the Meta developer console.
 - SQLite store path errors: create the parent directory or set `BOT_SQLITE_PATH` to a writable location.
 - `/healthz` shows `*_configured: false`: fill in the missing WhatsApp or Contextual bot variables in `.env` and restart the app.
+- Check `./logs/whatsapp_agent_events.jsonl` to inspect stored `attributions` and `retrieval_contents` for later evaluation or debugging.
 
 ## Migration Notes From Colab To Local
 

@@ -9,6 +9,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from contextual_hvac_rag.bot_whatsapp.cloud_api import WhatsAppCloudAPI
+from contextual_hvac_rag.bot_whatsapp.event_log import append_agent_event_log
+from contextual_hvac_rag.bot_whatsapp.formatter import format_for_whatsapp
 from contextual_hvac_rag.bot_whatsapp.guards import GuardViolation
 from contextual_hvac_rag.bot_whatsapp.store import InMemoryStore, SQLiteStore, StoreProtocol
 from contextual_hvac_rag.bot_whatsapp.webhook import (
@@ -132,9 +134,27 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
             if result.conversation_id:
                 STORE.set_conversation_id(message.wa_id, result.conversation_id)
 
+            reply_text = format_for_whatsapp(result.answer_text)
+            if not reply_text:
+                reply_text = "I could not generate a response for that request."
+
+            log_path = append_agent_event_log(
+                settings=SETTINGS,
+                inbound_message=message,
+                result=result,
+                formatted_reply=reply_text,
+            )
+            LOGGER.info(
+                "Stored WhatsApp agent event for %s at %s (attributions=%s, retrieval_contents=%s)",
+                message.wa_id,
+                log_path,
+                len(result.attributions),
+                len(result.retrieval_contents),
+            )
+
             WHATSAPP_API.send_text_reply(
                 wa_id=message.wa_id,
-                text=result.answer_text or "I could not generate a response for that request.",
+                text=reply_text,
                 trigger=to_inbound_trigger(message),
                 store=STORE,
             )
