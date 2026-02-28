@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Fixed the Contextual agent query request shape to use `messages` instead of `message`, based on live API validation feedback.
 - Added a `/healthz` endpoint for local WhatsApp bot readiness checks and a dedicated Meta test-number setup guide.
 - Fixed ingestion settings validation so `ingest-pdfs` only requires datastore credentials, not `CONTEXTUAL_AGENT_ID`.
 - Refined the ingestion refactor to more closely match the original Colab notebook: explicit local-path CLI flags, faithful TOC/index heuristics, and the original Contextual ingest metadata payload shape.

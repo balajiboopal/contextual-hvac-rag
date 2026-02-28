@@ -122,7 +122,14 @@ class ContextualClient:
         if not self._settings.contextual_agent_id:
             raise ContextualClientError("CONTEXTUAL_AGENT_ID is not configured.")
 
-        body: dict[str, Any] = {"message": message}
+        body: dict[str, Any] = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": message,
+                }
+            ]
+        }
         if conversation_id:
             body["conversation_id"] = conversation_id
 
