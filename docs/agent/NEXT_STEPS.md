@@ -26,8 +26,9 @@
 
 - [x] Document JSONL golden dataset format.
 - [x] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
-- [ ] Add a CLI to run the golden dataset against the agent query API.
-- [ ] Add retrieval normalization and JSONL/JSON writers for per-query results.
+- [x] Add a CLI-ready runner to execute the golden dataset against the agent query API.
+- [x] Add retrieval normalization and JSONL/JSON writers for per-query results.
+- [ ] Wire the new eval runner into the top-level Typer CLI.
 
 ## Deployment
 
