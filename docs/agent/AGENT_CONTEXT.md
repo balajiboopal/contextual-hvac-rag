@@ -14,6 +14,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - CLI entry point: `contextual_hvac_rag.cli`
 - Ingestion path: local ZIP/PDFs -> metadata extraction -> metadata flattening -> Contextual datastore ingest
 - Bot path: Meta webhook -> inbound message parse -> Contextual agent query -> WhatsApp reply
+- Eval path: golden CSV -> Contextual agent query -> retrieval normalization -> metrics -> JSONL/JSON outputs
 - Storage for bot state: in-memory (dev) or SQLite (local prod-ish)
 
 ## Invariants / Guardrails
@@ -29,6 +30,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
   - if user is inactive for more than 24 hours, do not send anything until the user messages again
 - Continue PDF ingestion on per-file failures and write JSONL ingest logs.
 - Successful WhatsApp agent responses are persisted to `logs/whatsapp_agent_events.jsonl` with `attributions` and `retrieval_contents`.
+- Evaluation is doc-wise and page-wise only. Chunk-wise metrics are intentionally not computed because no gold chunk ids exist.
 
 ## Key Environment Variables
 
@@ -57,6 +59,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
   - `ingest/`: unzip helper and PDF ingestion pipeline
   - `metadata/`: faithful Colab-derived PDF metadata heuristics and flattening
   - `bot_whatsapp/`: FastAPI app, webhook parsing, policy guards, Cloud API sender, event logging, and reply formatting
+  - `eval/`: CSV loader, retrieval normalization, metrics, latency summaries, writers, and offline runner
 - `tests/`: test suite placeholders and basic unit tests
 - `eval/`: evaluation dataset planning artifacts
 - `docs/agent/`: agent context, worklog, decisions, and prioritized next steps

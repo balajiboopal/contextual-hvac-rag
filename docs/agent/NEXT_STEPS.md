@@ -28,7 +28,8 @@
 - [x] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
 - [x] Add a CLI-ready runner to execute the golden dataset against the agent query API.
 - [x] Add retrieval normalization and JSONL/JSON writers for per-query results.
-- [ ] Wire the new eval runner into the top-level Typer CLI.
+- [x] Wire the new eval runner into the top-level Typer CLI.
+- [ ] Add a sample golden CSV fixture and an integration smoke test for the full eval command.
 
 ## Deployment
 

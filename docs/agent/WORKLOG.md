@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Wired the evaluation pipeline into the top-level CLI and replaced the eval placeholder docs with runnable instructions and metric definitions.
 - Added the evaluation runner, retrieval normalization, JSON writers, and offline summary generation against a golden CSV dataset.
 - Added the core evaluation primitives: golden CSV loading, page-range parsing, retrieval metrics, latency aggregation, and unit tests.
 - Added WhatsApp-friendly response formatting and persistent JSONL logging of `attributions` / `retrieval_contents` for later evaluation.

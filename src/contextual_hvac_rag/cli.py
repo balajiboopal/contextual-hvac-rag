@@ -62,5 +62,24 @@ def ingest_pdfs(
     )
 
 
+@app.command("eval")
+def run_eval(
+    input_csv: Path = typer.Option(..., "--input", exists=True, dir_okay=False),
+    out_dir: Path = typer.Option(..., "--out", file_okay=False),
+    top_k: int = typer.Option(10, "--top-k", min=10),
+    anchor_threshold: int = typer.Option(80, "--anchor-threshold", min=0, max=100),
+) -> None:
+    """Run the offline golden-dataset evaluation pipeline."""
+
+    from contextual_hvac_rag.eval.run import run_evaluation
+
+    run_evaluation(
+        input_csv=input_csv,
+        out_dir=out_dir,
+        top_k=top_k,
+        anchor_threshold=anchor_threshold,
+    )
+
+
 if __name__ == "__main__":
     app()

@@ -85,7 +85,7 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
   - Replies are normalized into WhatsApp-friendly plain text before sending.
   - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.
 - `src/contextual_hvac_rag/cli.py`: Typer entry point.
-- `eval/`: placeholder evaluation dataset docs and sample JSONL.
+- `eval/`: golden-dataset evaluation docs and sample artifacts.
 - `docs/agent/`: source-of-truth docs for future agent-assisted changes.
 
 ## Local Run Instructions
@@ -117,6 +117,12 @@ curl http://127.0.0.1:8000/healthz
 ```
 
 For a step-by-step Meta sandbox setup using the WhatsApp test number, see `docs/whatsapp_test_number_setup.md`.
+
+### Run the evaluation pipeline
+
+```bash
+contextual-hvac-rag eval --input ./eval/golden.csv --out ./eval/results --top-k 10
+```
 
 ## Troubleshooting
 
