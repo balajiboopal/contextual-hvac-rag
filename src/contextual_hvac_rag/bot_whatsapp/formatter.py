@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]\([^)]*\)")
+BROKEN_CITATION_PATTERN = re.compile(r"(?:[0-9¹²³⁴⁵⁶⁷⁸⁹⁰]+\(\))+")
 MARKDOWN_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 STAR_HEADING_PATTERN = re.compile(r"^\*{1,2}(.+?)\*{1,2}$")
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\|?\s*[:\-| ]+\|?\s*$")
@@ -21,6 +22,8 @@ def format_for_whatsapp(text: str) -> str:
         return ""
 
     cleaned_text = CITATION_PATTERN.sub("", text)
+    cleaned_text = BROKEN_CITATION_PATTERN.sub("", cleaned_text)
+    cleaned_text = re.sub(r" {2,}", " ", cleaned_text)
     output_lines: list[str] = []
     pending_table_header: str | None = None
     in_table_body = False

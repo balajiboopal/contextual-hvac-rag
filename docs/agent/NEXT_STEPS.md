@@ -19,6 +19,7 @@
 - [x] Confirm the top-level live response shape and support nested response extraction.
 - [x] Persist attribution payloads for later evaluation and normalize replies for WhatsApp display.
 - [x] Improve WhatsApp formatting for malformed table-like output and broken Unicode bullets.
+- [x] Strip malformed numeric citation remnants like `1()` and `¹()` from final WhatsApp replies.
 - [x] Convert common two-column maintenance tables into title-plus-detail chat bullets.
 - [x] Add a bot-only direct ACL query mode to avoid the wasted `/query` probe request.
 - [x] Add a short-lived per-user response cache for repeated identical questions.

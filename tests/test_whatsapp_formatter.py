@@ -81,3 +81,11 @@ def test_format_reply_chunks_splits_long_messages() -> None:
 
     assert len(chunks) >= 2
     assert all(len(chunk) <= 180 for chunk in chunks)
+
+
+def test_format_for_whatsapp_strips_broken_numeric_citation_tokens() -> None:
+    source_text = "¹()²()³() Regular maintenance is required. 1()2()3() Always inspect the unit."
+
+    formatted = format_for_whatsapp(source_text)
+
+    assert formatted == "Regular maintenance is required. Always inspect the unit."
