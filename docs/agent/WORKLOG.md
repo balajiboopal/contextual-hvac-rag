@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added a reusable voice-pipeline blueprint and copy-paste agent prompt covering free-model STT/TTS, Indian language support, and a staged WhatsApp voice rollout plan.
 - Added a reusable markdown blueprint and a copy-paste agent prompt so the exact evaluation pipeline can be recreated in the open-source variant of this project.
 - Set the evaluation pipeline to use direct ACL agent queries by default and added explicit metric notes clarifying that page nDCG gives partial credit for correct-document/wrong-page retrievals.
 - Updated the evaluation runner to skip DOC/PAGE scoring for rows with missing gold fields, added a `--limit` smoke-test option, and documented the unrated-row behavior.
