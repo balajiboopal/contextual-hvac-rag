@@ -41,6 +41,7 @@
 - [x] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
 - [x] Skip scoring for rows that are missing required gold fields and support small smoke-test runs with `--limit`.
 - [x] Use direct ACL agent queries in eval by default and clarify page nDCG partial-credit semantics.
+- [x] Add portable markdown docs and a reusable agent prompt for recreating the evaluation pipeline in another repo.
 - [x] Add a CLI-ready runner to execute the golden dataset against the agent query API.
 - [x] Add retrieval normalization and JSONL/JSON writers for per-query results.
 - [x] Wire the new eval runner into the top-level Typer CLI.

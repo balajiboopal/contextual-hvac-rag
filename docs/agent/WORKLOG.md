@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added a reusable markdown blueprint and a copy-paste agent prompt so the exact evaluation pipeline can be recreated in the open-source variant of this project.
 - Set the evaluation pipeline to use direct ACL agent queries by default and added explicit metric notes clarifying that page nDCG gives partial credit for correct-document/wrong-page retrievals.
 - Updated the evaluation runner to skip DOC/PAGE scoring for rows with missing gold fields, added a `--limit` smoke-test option, and documented the unrated-row behavior.
 - Suppressed generic table-label artifacts like `Step`, `Action`, and `Specific Details`, normalized isolated numeric step markers, and cleaned square-bullet glyphs in WhatsApp replies.
