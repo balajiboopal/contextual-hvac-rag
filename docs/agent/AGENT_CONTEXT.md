@@ -32,6 +32,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - Successful WhatsApp agent responses are persisted to `logs/whatsapp_agent_events.jsonl` with `attributions` and `retrieval_contents`.
 - The bot uses direct `/query/acl` mode by default, a short-lived per-user response cache in stateless mode, and best-effort stage-timing logs to reduce repeated-query latency.
 - Bot conversation memory is configurable: `stateful` reuses Contextual `conversation_id`, while `stateless` favors speed and cacheability.
+- The optional `BOT_RESPONSE_STYLE_PROMPT` is disabled by default because it can reduce retrieval grounding for some queries.
 - Evaluation is doc-wise and page-wise only. Chunk-wise metrics are intentionally not computed because no gold chunk ids exist.
 
 ## Key Environment Variables

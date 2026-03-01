@@ -37,12 +37,7 @@ class Settings(BaseSettings):
     bot_response_cache_ttl_seconds: int = 300
     bot_reply_chunk_chars: int = 1200
     bot_retrieval_preview_count: int = 3
-    bot_response_style_prompt: str = (
-        "Answer for WhatsApp in concise plain text. "
-        "Use short sections and bullet lists when helpful. "
-        "Avoid markdown tables. "
-        "Prefer practical steps first, then optional details."
-    )
+    bot_response_style_prompt: str = ""
     ingest_log_dir: Path = Path("./logs")
 
     def missing_contextual_vars(self) -> list[str]:
