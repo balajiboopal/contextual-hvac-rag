@@ -30,10 +30,19 @@ class Settings(BaseSettings):
     wa_verify_token: SecretStr | None = None
 
     app_log_level: str = "INFO"
-    bot_store_backend: Literal["memory", "sqlite"] = "memory"
+    bot_store_backend: Literal["memory", "sqlite"] = "sqlite"
     bot_sqlite_path: Path = Path("./data/whatsapp_bot.sqlite3")
+    bot_conversation_mode: Literal["stateful", "stateless"] = "stateful"
     bot_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"
     bot_response_cache_ttl_seconds: int = 300
+    bot_reply_chunk_chars: int = 1200
+    bot_retrieval_preview_count: int = 3
+    bot_response_style_prompt: str = (
+        "Answer for WhatsApp in concise plain text. "
+        "Use short sections and bullet lists when helpful. "
+        "Avoid markdown tables. "
+        "Prefer practical steps first, then optional details."
+    )
     ingest_log_dir: Path = Path("./logs")
 
     def missing_contextual_vars(self) -> list[str]:

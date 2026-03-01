@@ -23,6 +23,11 @@
 - [x] Add a bot-only direct ACL query mode to avoid the wasted `/query` probe request.
 - [x] Add a short-lived per-user response cache for repeated identical questions.
 - [x] Log and persist best-effort stage timings for the live bot query path.
+- [x] Make the bot memory mode configurable so it can run stateful or stateless.
+- [x] Prefer SQLite-backed local bot state in the env template for durable conversation continuity.
+- [x] Split long WhatsApp replies into multiple message-safe chunks.
+- [x] Add compact retrieval previews to the bot logs for faster answer-quality debugging.
+- [x] Apply concise WhatsApp-oriented response guidance before querying the agent.
 - [ ] Add an integration test that locks the known Contextual agent response schema.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.

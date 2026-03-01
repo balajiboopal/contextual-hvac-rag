@@ -30,7 +30,8 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
   - if user is inactive for more than 24 hours, do not send anything until the user messages again
 - Continue PDF ingestion on per-file failures and write JSONL ingest logs.
 - Successful WhatsApp agent responses are persisted to `logs/whatsapp_agent_events.jsonl` with `attributions` and `retrieval_contents`.
-- The bot uses direct `/query/acl` mode by default, a short-lived per-user response cache, and best-effort stage-timing logs to reduce repeated-query latency.
+- The bot uses direct `/query/acl` mode by default, a short-lived per-user response cache in stateless mode, and best-effort stage-timing logs to reduce repeated-query latency.
+- Bot conversation memory is configurable: `stateful` reuses Contextual `conversation_id`, while `stateless` favors speed and cacheability.
 - Evaluation is doc-wise and page-wise only. Chunk-wise metrics are intentionally not computed because no gold chunk ids exist.
 
 ## Key Environment Variables
@@ -44,8 +45,12 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - `WA_VERIFY_TOKEN`
 - `BOT_STORE_BACKEND`
 - `BOT_SQLITE_PATH`
+- `BOT_CONVERSATION_MODE`
 - `BOT_CONTEXTUAL_QUERY_MODE`
 - `BOT_RESPONSE_CACHE_TTL_SECONDS`
+- `BOT_REPLY_CHUNK_CHARS`
+- `BOT_RETRIEVAL_PREVIEW_COUNT`
+- `BOT_RESPONSE_STYLE_PROMPT`
 - `INGEST_LOG_DIR`
 
 ## HTTP Endpoints

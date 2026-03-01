@@ -82,7 +82,8 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
 - `src/contextual_hvac_rag/metadata/`: PDF metadata extraction and metadata flattening.
 - `src/contextual_hvac_rag/ingest/`: unzip helper and PDF ingestion pipeline.
 - `src/contextual_hvac_rag/bot_whatsapp/`: FastAPI webhook, stores, guardrails, and Meta Cloud API sender.
-  - Replies are normalized into WhatsApp-friendly plain text before sending.
+  - Replies are normalized into WhatsApp-friendly plain text and split into message-safe chunks before sending.
+  - Bot memory can run `stateful` (conversation reuse) or `stateless` (lower latency, better cache reuse).
   - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.
 - `src/contextual_hvac_rag/cli.py`: Typer entry point.
 - `eval/`: golden-dataset evaluation docs and sample artifacts.
@@ -116,6 +117,8 @@ Validate local bot readiness before configuring Meta:
 curl http://127.0.0.1:8000/healthz
 ```
 
+The provided `.env.example` now defaults to `BOT_STORE_BACKEND=sqlite` so conversation memory survives local restarts.
+
 For a step-by-step Meta sandbox setup using the WhatsApp test number, see `docs/whatsapp_test_number_setup.md`.
 
 ### Run the evaluation pipeline
@@ -132,6 +135,7 @@ contextual-hvac-rag eval --input ./eval/golden.csv --out ./eval/results --top-k 
 - Webhook verification fails: ensure `WA_VERIFY_TOKEN` matches the token configured in the Meta developer console.
 - SQLite store path errors: create the parent directory or set `BOT_SQLITE_PATH` to a writable location.
 - `/healthz` shows `*_configured: false`: fill in the missing WhatsApp or Contextual bot variables in `.env` and restart the app.
+- Cache hits are not happening: the cache is only active in `BOT_CONVERSATION_MODE=stateless`, and repeated questions must arrive before `BOT_RESPONSE_CACHE_TTL_SECONDS` expires.
 - Check `./logs/whatsapp_agent_events.jsonl` to inspect stored `attributions` and `retrieval_contents` for later evaluation or debugging.
 
 ## Migration Notes From Colab To Local

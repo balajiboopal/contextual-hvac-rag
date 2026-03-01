@@ -10,6 +10,8 @@ STAR_HEADING_PATTERN = re.compile(r"^\*{1,2}(.+?)\*{1,2}$")
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\|?\s*[:\-| ]+\|?\s*$")
 LEADING_BULLET_PATTERN = re.compile(r"^(?:[.\-•·●▪]|â€¢)\s+")
 STAR_TOKEN_PATTERN = re.compile(r"\*{1,2}([^*]+?)\*{1,2}")
+INLINE_BULLET_SPLIT_PATTERN = re.compile(r"\s*[•·]\s*")
+SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
 
 def format_for_whatsapp(text: str) -> str:
@@ -78,6 +80,13 @@ def format_for_whatsapp(text: str) -> str:
                 else:
                     output_lines.append(_normalize_bullets(cells[0]))
                 continue
+            pipe_rows = _format_pipe_table_row(
+                [_normalize_bullets(cell) for cell in cells],
+            )
+            if pipe_rows is not None:
+                output_lines.extend(pipe_rows)
+                in_table_body = True
+                continue
             output_lines.append(" - ".join(_normalize_bullets(cell) for cell in cells))
             in_table_body = True
             continue
@@ -101,6 +110,34 @@ def format_for_whatsapp(text: str) -> str:
         _append_heading(output_lines, pending_table_header)
 
     return _collapse_blank_lines(output_lines)
+
+
+def format_reply_chunks(text: str, *, max_chars: int = 1200) -> list[str]:
+    """Format a reply and split it into WhatsApp-friendly chunks."""
+
+    formatted = format_for_whatsapp(text)
+    if not formatted:
+        return []
+
+    limit = max(80, max_chars)
+    paragraphs = [part.strip() for part in formatted.split("\n\n") if part.strip()]
+    chunks: list[str] = []
+    current = ""
+
+    for paragraph in paragraphs:
+        for part in _split_paragraph_for_limit(paragraph, limit):
+            candidate = part if not current else f"{current}\n\n{part}"
+            if len(candidate) <= limit:
+                current = candidate
+                continue
+            if current:
+                chunks.append(current)
+            current = part
+
+    if current:
+        chunks.append(current)
+
+    return chunks
 
 
 def _normalize_bullets(line: str) -> str:
@@ -185,6 +222,101 @@ def _format_task_style_row(line: str) -> list[str] | None:
     if not detail.endswith((".", "!", "?")):
         detail = f"{detail}."
     return [f"- {title}", f"  {detail}"]
+
+
+def _format_pipe_table_row(cells: list[str]) -> list[str] | None:
+    """Convert common two-column table rows into chat-native bullets."""
+
+    if len(cells) < 2:
+        return None
+
+    title = cells[0].strip()
+    if not title or len(title) > 80:
+        return None
+
+    detail_segments: list[str] = []
+    for cell in cells[1:]:
+        detail_segments.extend(_split_detail_items(cell))
+
+    detail_segments = [segment for segment in detail_segments if segment]
+    if not detail_segments:
+        return [f"- {title}"]
+
+    if len(detail_segments) == 1:
+        return [f"- {title}", f"  {detail_segments[0]}"]
+
+    lines = [f"- {title}"]
+    lines.extend(f"  - {segment}" for segment in detail_segments)
+    return lines
+
+
+def _split_detail_items(detail: str) -> list[str]:
+    """Split a table detail cell into one or more readable detail lines."""
+
+    compact = detail.strip()
+    if not compact:
+        return []
+
+    pieces = [piece.strip() for piece in INLINE_BULLET_SPLIT_PATTERN.split(compact) if piece.strip()]
+    if not pieces:
+        pieces = [compact]
+
+    normalized: list[str] = []
+    for piece in pieces:
+        cleaned = piece.strip()
+        if not cleaned:
+            continue
+        if cleaned.startswith("- "):
+            cleaned = cleaned[2:].strip()
+        if not cleaned.endswith((".", "!", "?")):
+            cleaned = f"{cleaned}."
+        normalized.append(cleaned)
+    return normalized
+
+
+def _split_paragraph_for_limit(paragraph: str, limit: int) -> list[str]:
+    """Split a long paragraph into smaller message-safe parts."""
+
+    if len(paragraph) <= limit:
+        return [paragraph]
+
+    lines = [line.strip() for line in paragraph.splitlines() if line.strip()]
+    if len(lines) > 1:
+        return _merge_units_with_limit(lines, limit)
+
+    sentences = [part.strip() for part in SENTENCE_SPLIT_PATTERN.split(paragraph) if part.strip()]
+    if len(sentences) > 1:
+        return _merge_units_with_limit(sentences, limit)
+
+    return [
+        paragraph[index:index + limit].strip()
+        for index in range(0, len(paragraph), limit)
+        if paragraph[index:index + limit].strip()
+    ]
+
+
+def _merge_units_with_limit(units: list[str], limit: int) -> list[str]:
+    """Merge smaller units into chunks without exceeding the limit."""
+
+    chunks: list[str] = []
+    current = ""
+    for unit in units:
+        separator = "\n" if current else ""
+        candidate = f"{current}{separator}{unit}"
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+        if len(unit) <= limit:
+            current = unit
+            continue
+        chunks.extend(_split_paragraph_for_limit(unit, limit))
+        current = ""
+
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _collapse_blank_lines(lines: list[str]) -> str:

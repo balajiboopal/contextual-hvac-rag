@@ -25,6 +25,8 @@ class ResponseCache:
         self._ttl_seconds = max(0, ttl_seconds)
         self._max_entries = max(1, max_entries)
         self._entries: OrderedDict[str, tuple[float, CachedAgentResponse]] = OrderedDict()
+        self._hits = 0
+        self._misses = 0
 
     def get(self, key: str, *, now: float | None = None) -> CachedAgentResponse | None:
         """Return a cached entry if it exists and has not expired."""
@@ -33,12 +35,15 @@ class ResponseCache:
         self._purge_expired(current_time)
         entry = self._entries.get(key)
         if entry is None:
+            self._misses += 1
             return None
         expires_at, cached_response = entry
         if expires_at <= current_time:
             self._entries.pop(key, None)
+            self._misses += 1
             return None
         self._entries.move_to_end(key)
+        self._hits += 1
         return cached_response
 
     def set(self, key: str, value: CachedAgentResponse, *, now: float | None = None) -> None:
@@ -63,6 +68,16 @@ class ResponseCache:
         ]
         for key in expired_keys:
             self._entries.pop(key, None)
+
+    def stats(self) -> dict[str, int]:
+        """Return lightweight cache stats for health/debug output."""
+
+        return {
+            "entries": len(self._entries),
+            "hits": self._hits,
+            "misses": self._misses,
+            "ttl_seconds": self._ttl_seconds,
+        }
 
 
 def build_cache_key(*, wa_id: str, text: str) -> str:

@@ -123,25 +123,48 @@ class ContextualClient:
         *,
         message: str,
         conversation_id: str | None = None,
+        system_prompt: str | None = None,
     ) -> AgentQueryResult:
         """Send a query to the configured agent and return the parsed response."""
 
         if not self._settings.contextual_agent_id:
             raise ContextualClientError("CONTEXTUAL_AGENT_ID is not configured.")
 
-        body: dict[str, Any] = {
-            "messages": [
+        messages: list[dict[str, str]] = []
+        if system_prompt and system_prompt.strip():
+            messages.append(
                 {
-                    "role": "user",
-                    "content": message,
+                    "role": "system",
+                    "content": system_prompt.strip(),
                 }
-            ]
-        }
+            )
+        messages.append(
+            {
+                "role": "user",
+                "content": message,
+            }
+        )
+
+        body: dict[str, Any] = {"messages": messages}
         if conversation_id:
             body["conversation_id"] = conversation_id
 
         started_at = time.perf_counter()
-        response = self._query_agent_with_mode(body=body)
+        try:
+            response = self._query_agent_with_mode(body=body)
+        except ContextualAPIResponseError:
+            if not system_prompt or not messages or messages[0].get("role") != "system":
+                raise
+            LOGGER.warning(
+                "Retrying agent query for %s without a system prompt after request rejection.",
+                self._settings.contextual_agent_id,
+            )
+            response = self._query_agent_with_mode(
+                body={
+                    "messages": [messages[-1]],
+                    **({"conversation_id": conversation_id} if conversation_id else {}),
+                }
+            )
         total_elapsed_ms = (time.perf_counter() - started_at) * 1000.0
         payload = self._parse_json(response)
         answer_text = self._extract_agent_answer_text(payload)

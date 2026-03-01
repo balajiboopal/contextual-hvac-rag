@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from contextual_hvac_rag.bot_whatsapp.cache import CachedAgentResponse, ResponseCache, build_cache_key
 from contextual_hvac_rag.bot_whatsapp.cloud_api import WhatsAppCloudAPI
 from contextual_hvac_rag.bot_whatsapp.event_log import append_agent_event_log
-from contextual_hvac_rag.bot_whatsapp.formatter import format_for_whatsapp
+from contextual_hvac_rag.bot_whatsapp.formatter import format_reply_chunks
 from contextual_hvac_rag.bot_whatsapp.guards import GuardViolation
 from contextual_hvac_rag.bot_whatsapp.store import InMemoryStore, SQLiteStore, StoreProtocol
 from contextual_hvac_rag.bot_whatsapp.webhook import (
@@ -62,12 +62,20 @@ def shutdown_event() -> None:
 def healthcheck() -> JSONResponse:
     """Return a simple readiness snapshot for local setup validation."""
 
+    cache_stats = RESPONSE_CACHE.stats()
+
     return JSONResponse(
         content={
             "status": "ok",
             "bot_store_backend": SETTINGS.bot_store_backend,
+            "bot_conversation_mode": SETTINGS.bot_conversation_mode,
             "bot_contextual_query_mode": SETTINGS.bot_contextual_query_mode,
             "bot_response_cache_ttl_seconds": SETTINGS.bot_response_cache_ttl_seconds,
+            "bot_reply_chunk_chars": SETTINGS.bot_reply_chunk_chars,
+            "bot_cache_enabled": _is_cache_enabled(),
+            "bot_cache_entries": cache_stats["entries"],
+            "bot_cache_hits": cache_stats["hits"],
+            "bot_cache_misses": cache_stats["misses"],
             "contextual_agent_configured": bool(SETTINGS.contextual_agent_id),
             "wa_verify_token_configured": SETTINGS.wa_verify_token is not None,
             "wa_access_token_configured": SETTINGS.wa_access_token is not None,
@@ -135,10 +143,11 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
                 )
                 continue
 
-            conversation_id = STORE.get_conversation_id(message.wa_id)
-            cache_key = build_cache_key(wa_id=message.wa_id, text=message.text)
+            conversation_id = _get_conversation_id_for_message(message.wa_id)
+            cache_enabled = _is_cache_enabled()
+            cache_key = build_cache_key(wa_id=message.wa_id, text=message.text) if cache_enabled else ""
             cache_started_at = time.perf_counter()
-            cached_response = RESPONSE_CACHE.get(cache_key)
+            cached_response = RESPONSE_CACHE.get(cache_key) if cache_enabled else None
             cache_hit = cached_response is not None
             if cached_response is not None:
                 result = _build_cached_result(
@@ -155,8 +164,9 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
                 result = CONTEXTUAL_CLIENT.query_agent(
                     message=message.text,
                     conversation_id=conversation_id,
+                    system_prompt=SETTINGS.bot_response_style_prompt,
                 )
-                if result.answer_text.strip():
+                if cache_enabled and result.answer_text.strip():
                     RESPONSE_CACHE.set(
                         cache_key,
                         CachedAgentResponse(
@@ -166,41 +176,59 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
                         ),
                     )
 
+            _log_retrieval_preview(
+                wa_id=message.wa_id,
+                retrieval_contents=result.retrieval_contents,
+            )
             _log_agent_latencies(
                 wa_id=message.wa_id,
                 latency_ms=result.latency_ms,
                 cache_hit=cache_hit,
             )
 
-            if result.conversation_id and not cache_hit:
+            if result.conversation_id and not cache_hit and SETTINGS.bot_conversation_mode == "stateful":
                 STORE.set_conversation_id(message.wa_id, result.conversation_id)
 
-            reply_text = format_for_whatsapp(result.answer_text)
-            if not reply_text:
-                reply_text = "I could not generate a response for that request."
+            reply_chunks = format_reply_chunks(
+                result.answer_text,
+                max_chars=SETTINGS.bot_reply_chunk_chars,
+            )
+            if not reply_chunks:
+                reply_chunks = ["I could not generate a response for that request."]
+            formatted_reply = "\n\n".join(reply_chunks)
 
             log_path = append_agent_event_log(
                 settings=SETTINGS,
                 inbound_message=message,
                 result=result,
-                formatted_reply=reply_text,
+                formatted_reply=formatted_reply,
                 cache_hit=cache_hit,
+                reply_chunk_count=len(reply_chunks),
             )
             LOGGER.info(
-                "Stored WhatsApp agent event for %s at %s (cache_hit=%s, attributions=%s, retrieval_contents=%s)",
+                "Stored WhatsApp agent event for %s at %s (cache_hit=%s, reply_chunks=%s, attributions=%s, retrieval_contents=%s)",
                 message.wa_id,
                 log_path,
                 cache_hit,
+                len(reply_chunks),
                 len(result.attributions),
                 len(result.retrieval_contents),
             )
 
-            WHATSAPP_API.send_text_reply(
-                wa_id=message.wa_id,
-                text=reply_text,
-                trigger=to_inbound_trigger(message),
-                store=STORE,
-            )
+            for chunk_index, reply_chunk in enumerate(reply_chunks, start=1):
+                if len(reply_chunks) > 1:
+                    LOGGER.info(
+                        "Sending WhatsApp reply chunk %s/%s to %s",
+                        chunk_index,
+                        len(reply_chunks),
+                        message.wa_id,
+                    )
+                WHATSAPP_API.send_text_reply(
+                    wa_id=message.wa_id,
+                    text=reply_chunk,
+                    trigger=to_inbound_trigger(message),
+                    store=STORE,
+                )
         except GuardViolation as exc:
             LOGGER.warning("Blocked WhatsApp reply for %s: %s", message.wa_id, exc)
         except ContextualClientError as exc:
@@ -247,3 +275,68 @@ def _log_agent_latencies(
         cache_hit,
         ", ".join(rendered_parts),
     )
+
+
+def _get_conversation_id_for_message(wa_id: str) -> str | None:
+    """Return the conversation id only when stateful memory is enabled."""
+
+    if SETTINGS.bot_conversation_mode != "stateful":
+        return None
+    return STORE.get_conversation_id(wa_id)
+
+
+def _is_cache_enabled() -> bool:
+    """Return whether the latency cache is active for the current bot mode."""
+
+    return (
+        SETTINGS.bot_conversation_mode == "stateless"
+        and SETTINGS.bot_response_cache_ttl_seconds > 0
+    )
+
+
+def _log_retrieval_preview(
+    *,
+    wa_id: str,
+    retrieval_contents: list[dict[str, object]],
+) -> None:
+    """Log a compact retrieval preview for faster debugging of answer quality."""
+
+    if not retrieval_contents:
+        LOGGER.info("No retrieval contents returned for %s", wa_id)
+        return
+
+    preview_count = max(1, SETTINGS.bot_retrieval_preview_count)
+    preview_items: list[str] = []
+    for item in retrieval_contents[:preview_count]:
+        filename = _extract_retrieval_filename(item)
+        page = item.get("page")
+        score = item.get("score")
+        preview_items.append(
+            f"{filename}@p{page if page is not None else '?'} (score={score})"
+        )
+
+    LOGGER.info(
+        "Top retrievals for %s: %s",
+        wa_id,
+        "; ".join(preview_items),
+    )
+
+
+def _extract_retrieval_filename(item: dict[str, object]) -> str:
+    """Return the most useful filename-like label for a retrieval item."""
+
+    metadata = item.get("ctxl_metadata")
+    if isinstance(metadata, dict):
+        file_name = metadata.get("file_name")
+        if isinstance(file_name, str) and file_name.strip():
+            return file_name
+
+    doc_name = item.get("doc_name")
+    if isinstance(doc_name, str) and doc_name.strip():
+        return doc_name
+
+    content_id = item.get("content_id")
+    if isinstance(content_id, str) and content_id.strip():
+        return content_id
+
+    return "unknown"

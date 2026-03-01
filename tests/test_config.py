@@ -18,3 +18,9 @@ def test_env_presence_reports_missing_values() -> None:
     assert presence["CONTEXTUAL_API_KEY"] is False
     assert presence["WA_VERIFY_TOKEN"] is False
 
+
+def test_bot_defaults_favor_sqlite_and_stateful_memory() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.bot_store_backend == "sqlite"
+    assert settings.bot_conversation_mode == "stateful"
