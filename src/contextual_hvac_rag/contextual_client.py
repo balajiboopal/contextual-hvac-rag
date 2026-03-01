@@ -6,11 +6,12 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
 from contextual_hvac_rag.config import Settings
+from contextual_hvac_rag.eval.latency import extract_latency_ms
 
 LOGGER = logging.getLogger(__name__)
 RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
@@ -48,6 +49,7 @@ class AgentQueryResult:
     answer_text: str
     attributions: list[dict[str, Any]]
     retrieval_contents: list[dict[str, Any]]
+    latency_ms: dict[str, float | None]
     payload: dict[str, Any]
 
 
@@ -61,10 +63,12 @@ class ContextualClient:
         timeout_seconds: float = 30.0,
         max_retries: int = 3,
         backoff_seconds: float = 1.0,
+        agent_query_mode: Literal["auto", "query", "query_acl"] = "auto",
     ) -> None:
         self._settings = settings
         self._max_retries = max_retries
         self._backoff_seconds = backoff_seconds
+        self._agent_query_mode = agent_query_mode
         self._client = httpx.Client(
             base_url=settings.contextual_api_base.rstrip("/"),
             timeout=timeout_seconds,
@@ -136,24 +140,9 @@ class ContextualClient:
         if conversation_id:
             body["conversation_id"] = conversation_id
 
-        try:
-            response = self._request_with_retries(
-                "POST",
-                f"/agents/{self._settings.contextual_agent_id}/query",
-                json=body,
-            )
-        except ContextualAPIResponseError as exc:
-            if "ACL is active" not in exc.body:
-                raise
-            LOGGER.info(
-                "Agent %s requires ACL query endpoint; retrying with /query/acl.",
-                self._settings.contextual_agent_id,
-            )
-            response = self._request_with_retries(
-                "POST",
-                f"/agents/{self._settings.contextual_agent_id}/query/acl",
-                json=body,
-            )
+        started_at = time.perf_counter()
+        response = self._query_agent_with_mode(body=body)
+        total_elapsed_ms = (time.perf_counter() - started_at) * 1000.0
         payload = self._parse_json(response)
         answer_text = self._extract_agent_answer_text(payload)
         returned_conversation_id = payload.get("conversation_id")
@@ -173,8 +162,32 @@ class ContextualClient:
             answer_text=str(answer_text),
             attributions=self._extract_dict_list(payload.get("attributions")),
             retrieval_contents=self._extract_dict_list(payload.get("retrieval_contents")),
+            latency_ms=extract_latency_ms(payload=payload, total_elapsed_ms=total_elapsed_ms),
             payload=payload,
         )
+
+    def _query_agent_with_mode(self, *, body: dict[str, Any]) -> httpx.Response:
+        """Query the agent using the configured endpoint mode."""
+
+        query_path = f"/agents/{self._settings.contextual_agent_id}/query"
+        query_acl_path = f"{query_path}/acl"
+
+        if self._agent_query_mode == "query":
+            return self._request_with_retries("POST", query_path, json=body)
+
+        if self._agent_query_mode == "query_acl":
+            return self._request_with_retries("POST", query_acl_path, json=body)
+
+        try:
+            return self._request_with_retries("POST", query_path, json=body)
+        except ContextualAPIResponseError as exc:
+            if "ACL is active" not in exc.body:
+                raise
+            LOGGER.info(
+                "Agent %s requires ACL query endpoint; retrying with /query/acl.",
+                self._settings.contextual_agent_id,
+            )
+            return self._request_with_retries("POST", query_acl_path, json=body)
 
     def _request_with_retries(
         self,

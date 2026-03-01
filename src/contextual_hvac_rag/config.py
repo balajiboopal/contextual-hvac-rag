@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     app_log_level: str = "INFO"
     bot_store_backend: Literal["memory", "sqlite"] = "memory"
     bot_sqlite_path: Path = Path("./data/whatsapp_bot.sqlite3")
+    bot_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"
+    bot_response_cache_ttl_seconds: int = 300
     ingest_log_dir: Path = Path("./logs")
 
     def missing_contextual_vars(self) -> list[str]:

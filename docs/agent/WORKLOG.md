@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added a bot-only direct ACL query mode, a short-lived per-user response cache, and structured live stage-timing logs to cut repeated-query latency.
 - Added a targeted formatter rule that rewrites two-column maintenance tables into WhatsApp-style bullets with title and detail lines.
 - Improved WhatsApp reply formatting to better handle malformed table rows, mojibake bullets, and heading spacing so chat output reads more naturally.
 - Aligned evaluation output keys with the requested schema by adding explicit error fields and a `by_gold_sources` summary map.

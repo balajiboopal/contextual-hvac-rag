@@ -20,6 +20,9 @@
 - [x] Persist attribution payloads for later evaluation and normalize replies for WhatsApp display.
 - [x] Improve WhatsApp formatting for malformed table-like output and broken Unicode bullets.
 - [x] Convert common two-column maintenance tables into title-plus-detail chat bullets.
+- [x] Add a bot-only direct ACL query mode to avoid the wasted `/query` probe request.
+- [x] Add a short-lived per-user response cache for repeated identical questions.
+- [x] Log and persist best-effort stage timings for the live bot query path.
 - [ ] Add an integration test that locks the known Contextual agent response schema.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.

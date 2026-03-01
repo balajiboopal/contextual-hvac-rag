@@ -7,7 +7,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - ZIP extraction for uploaded manual datasets.
 - PDF metadata extraction and ingestion into a Contextual datastore.
 - A WhatsApp-only support bot using Meta's official WhatsApp Cloud API.
-- Placeholder evaluation assets for future retrieval benchmarking.
+- An offline golden-dataset evaluation pipeline for retrieval benchmarking.
 
 ## Architecture
 
@@ -30,6 +30,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
   - if user is inactive for more than 24 hours, do not send anything until the user messages again
 - Continue PDF ingestion on per-file failures and write JSONL ingest logs.
 - Successful WhatsApp agent responses are persisted to `logs/whatsapp_agent_events.jsonl` with `attributions` and `retrieval_contents`.
+- The bot uses direct `/query/acl` mode by default, a short-lived per-user response cache, and best-effort stage-timing logs to reduce repeated-query latency.
 - Evaluation is doc-wise and page-wise only. Chunk-wise metrics are intentionally not computed because no gold chunk ids exist.
 
 ## Key Environment Variables
@@ -43,6 +44,8 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - `WA_VERIFY_TOKEN`
 - `BOT_STORE_BACKEND`
 - `BOT_SQLITE_PATH`
+- `BOT_CONTEXTUAL_QUERY_MODE`
+- `BOT_RESPONSE_CACHE_TTL_SECONDS`
 - `INGEST_LOG_DIR`
 
 ## HTTP Endpoints
@@ -50,6 +53,7 @@ This repository implements a Python 3.11+ scaffold for an HVAC / technical-manua
 - `GET /healthz`
 - `POST /datastores/{DATASTORE_ID}/documents`
 - `POST /agents/{AGENT_ID}/query`
+- `POST /agents/{AGENT_ID}/query/acl`
 - `GET /whatsapp/webhook`
 - `POST /whatsapp/webhook`
 

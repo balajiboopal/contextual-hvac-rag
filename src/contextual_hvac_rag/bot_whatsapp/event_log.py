@@ -17,6 +17,7 @@ def append_agent_event_log(
     inbound_message: InboundMessage,
     result: AgentQueryResult,
     formatted_reply: str,
+    cache_hit: bool,
 ) -> Path:
     """Append a structured bot interaction record for later evaluation."""
 
@@ -32,6 +33,8 @@ def append_agent_event_log(
         "contextual_message_id": result.message_id,
         "raw_answer_text": result.answer_text,
         "formatted_reply_text": formatted_reply,
+        "cache_hit": cache_hit,
+        "latency_ms": result.latency_ms,
         "attributions": result.attributions,
         "retrieval_contents": result.retrieval_contents,
     }
