@@ -36,6 +36,16 @@ contextual-hvac-rag eval \
   --anchor-threshold 80
 ```
 
+Run only a quick subset during smoke testing:
+
+```bash
+contextual-hvac-rag eval \
+  --input ./eval/golden.csv \
+  --out ./eval/results_smoke \
+  --top-k 10 \
+  --limit 5
+```
+
 ## What It Produces
 
 The command writes:
@@ -69,12 +79,14 @@ For `k in {1, 3, 5, 10}`, the evaluator computes:
 
 - A hit is counted when the retrieved filename matches `gold_sources`
 - Filename matching is normalized using Unicode normalization, `Path.name`, trimming, and `casefold()`
+- If `gold_sources` is blank for a row, that row is not included in DOC-level scoring
 
 ### PAGE Matching
 
 - Preferred: exact page hit using `gold_sources + page_range`
 - Fallback: if page is missing or unusable, `anchor_text` fuzzy matching is used against the retrieved snippet
 - Default fuzzy threshold: `80`
+- If both `page_range` and `anchor_text` are blank for a row, that row is not included in PAGE-level scoring
 
 Page-wise graded relevance:
 

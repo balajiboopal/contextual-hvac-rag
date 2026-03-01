@@ -68,6 +68,7 @@ def run_eval(
     out_dir: Path = typer.Option(..., "--out", file_okay=False),
     top_k: int = typer.Option(10, "--top-k", min=10),
     anchor_threshold: int = typer.Option(80, "--anchor-threshold", min=0, max=100),
+    limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
     """Run the offline golden-dataset evaluation pipeline."""
 
@@ -78,6 +79,7 @@ def run_eval(
         out_dir=out_dir,
         top_k=top_k,
         anchor_threshold=anchor_threshold,
+        limit=limit,
     )
 
 

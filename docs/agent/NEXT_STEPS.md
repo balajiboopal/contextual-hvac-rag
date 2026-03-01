@@ -39,6 +39,7 @@
 
 - [x] Document JSONL golden dataset format.
 - [x] Add retrieval metric calculators (Recall@K, MRR, source hit rate, citation validity).
+- [x] Skip scoring for rows that are missing required gold fields and support small smoke-test runs with `--limit`.
 - [x] Add a CLI-ready runner to execute the golden dataset against the agent query API.
 - [x] Add retrieval normalization and JSONL/JSON writers for per-query results.
 - [x] Wire the new eval runner into the top-level Typer CLI.

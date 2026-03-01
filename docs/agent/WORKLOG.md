@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Updated the evaluation runner to skip DOC/PAGE scoring for rows with missing gold fields, added a `--limit` smoke-test option, and documented the unrated-row behavior.
 - Suppressed generic table-label artifacts like `Step`, `Action`, and `Specific Details`, normalized isolated numeric step markers, and cleaned square-bullet glyphs in WhatsApp replies.
 - Fixed the WhatsApp formatter to strip malformed numeric citation remnants like `1()` and `¹()` that were leaking into final replies.
 - Changed the WhatsApp reply path back to a single outbound message per user query, collapsing any internal formatting segments before sending.

@@ -43,6 +43,7 @@ def run_evaluation(
     out_dir: Path,
     top_k: int = 10,
     anchor_threshold: int = 80,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Run the offline evaluation pipeline and return the aggregated summary."""
 
@@ -57,6 +58,8 @@ def run_evaluation(
         )
 
     rows = load_golden_dataset(input_csv)
+    if limit is not None:
+        rows = rows[:limit]
     out_dir.mkdir(parents=True, exist_ok=True)
     per_query_path = out_dir / "per_query_results.jsonl"
     summary_path = out_dir / "summary.json"
@@ -115,6 +118,8 @@ def _evaluate_single_row(
         error_type = type(exc).__name__
         LOGGER.exception("Evaluation query failed for row %s", row.row_index)
 
+    doc_scorable = _is_doc_scorable(row)
+    page_scorable = _is_page_scorable(row)
     doc_relevances, page_grades, page_binary = _compute_relevance_lists(
         row=row,
         retrieval_items=retrieval_items,
@@ -130,8 +135,10 @@ def _evaluate_single_row(
         "anchor_text": row.anchor_text,
         "answer_text": answer_text,
         "normalized_retrieval_topN": [item.to_dict() for item in retrieval_items],
-        "doc_rr": mrr_at_k(doc_relevances, 10),
-        "page_rr": mrr_at_k(page_binary, 10),
+        "doc_scored": doc_scorable,
+        "page_scored": page_scorable,
+        "doc_rr": mrr_at_k(doc_relevances, 10) if doc_scorable else None,
+        "page_rr": mrr_at_k(page_binary, 10) if page_scorable else None,
         "latency_ms": {
             "total": latencies["total"],
             "embed": latencies["embed"],
@@ -144,16 +151,16 @@ def _evaluate_single_row(
     }
 
     for k in ks:
-        record[f"doc_hit@{k}"] = bool(recall_at_k(doc_relevances, k))
-        record[f"page_hit@{k}"] = bool(recall_at_k(page_binary, k))
-        record[f"doc_ndcg@{k}"] = ndcg_at_k(doc_relevances, k)
-        record[f"page_ndcg@{k}"] = ndcg_at_k(page_grades, k)
+        record[f"doc_hit@{k}"] = bool(recall_at_k(doc_relevances, k)) if doc_scorable else None
+        record[f"page_hit@{k}"] = bool(recall_at_k(page_binary, k)) if page_scorable else None
+        record[f"doc_ndcg@{k}"] = ndcg_at_k(doc_relevances, k) if doc_scorable else None
+        record[f"page_ndcg@{k}"] = ndcg_at_k(page_grades, k) if page_scorable else None
 
     if 10 not in ks:
-        record["doc_hit@10"] = bool(recall_at_k(doc_relevances, 10))
-        record["page_hit@10"] = bool(recall_at_k(page_binary, 10))
-        record["doc_ndcg@10"] = ndcg_at_k(doc_relevances, 10)
-        record["page_ndcg@10"] = ndcg_at_k(page_grades, 10)
+        record["doc_hit@10"] = bool(recall_at_k(doc_relevances, 10)) if doc_scorable else None
+        record["page_hit@10"] = bool(recall_at_k(page_binary, 10)) if page_scorable else None
+        record["doc_ndcg@10"] = ndcg_at_k(doc_relevances, 10) if doc_scorable else None
+        record["page_ndcg@10"] = ndcg_at_k(page_grades, 10) if page_scorable else None
 
     if response_payload:
         record["contextual_conversation_id"] = response_payload.get("conversation_id")
@@ -205,6 +212,7 @@ def run_evaluation_cli(
     out_dir: Path = typer.Option(..., "--out", file_okay=False),
     top_k: int = typer.Option(10, "--top-k", min=10),
     anchor_threshold: int = typer.Option(80, "--anchor-threshold", min=0, max=100),
+    limit: int | None = typer.Option(None, "--limit", min=1),
 ) -> None:
     """CLI entry point for the offline evaluation pipeline."""
 
@@ -213,6 +221,7 @@ def run_evaluation_cli(
         out_dir=out_dir,
         top_k=top_k,
         anchor_threshold=anchor_threshold,
+        limit=limit,
     )
 
 
@@ -222,6 +231,9 @@ def _compute_relevance_lists(
     retrieval_items: list[NormalizedRetrievalItem],
     anchor_threshold: int,
 ) -> tuple[list[int], list[int], list[int]]:
+    if not _is_doc_scorable(row):
+        return [], [], []
+
     gold_filename = normalize_filename(row.gold_source)
     doc_relevances: list[int] = []
     page_grades: list[int] = []
@@ -251,18 +263,42 @@ def _compute_relevance_lists(
     return doc_relevances, page_grades, page_binary
 
 
+def _is_doc_scorable(row: GoldenDatasetRow) -> bool:
+    """Return whether a row has enough gold data for document-level scoring."""
+
+    return bool(row.gold_source.strip())
+
+
+def _is_page_scorable(row: GoldenDatasetRow) -> bool:
+    """Return whether a row has enough gold data for page-level scoring."""
+
+    return _is_doc_scorable(row) and bool(row.gold_pages or row.anchor_text.strip())
+
+
 def _aggregate_metrics(records: list[dict[str, Any]], *, ks: tuple[int, ...]) -> dict[str, Any]:
     doc_metrics: dict[str, float] = {}
     page_metrics: dict[str, float] = {}
+    doc_records = [record for record in records if record.get("doc_scored") is True]
+    page_records = [record for record in records if record.get("page_scored") is True]
 
     for k in ks:
-        doc_metrics[f"recall@{k}"] = average([float(record.get(f"doc_hit@{k}", 0.0)) for record in records])
-        page_metrics[f"recall@{k}"] = average([float(record.get(f"page_hit@{k}", 0.0)) for record in records])
-        doc_metrics[f"ndcg@{k}"] = average([float(record.get(f"doc_ndcg@{k}", 0.0)) for record in records])
-        page_metrics[f"ndcg@{k}"] = average([float(record.get(f"page_ndcg@{k}", 0.0)) for record in records])
+        doc_metrics[f"recall@{k}"] = average(
+            [float(record.get(f"doc_hit@{k}", 0.0)) for record in doc_records]
+        )
+        page_metrics[f"recall@{k}"] = average(
+            [float(record.get(f"page_hit@{k}", 0.0)) for record in page_records]
+        )
+        doc_metrics[f"ndcg@{k}"] = average(
+            [float(record.get(f"doc_ndcg@{k}", 0.0)) for record in doc_records]
+        )
+        page_metrics[f"ndcg@{k}"] = average(
+            [float(record.get(f"page_ndcg@{k}", 0.0)) for record in page_records]
+        )
 
-    doc_metrics["mrr@10"] = average([float(record.get("doc_rr", 0.0)) for record in records])
-    page_metrics["mrr@10"] = average([float(record.get("page_rr", 0.0)) for record in records])
+    doc_metrics["mrr@10"] = average([float(record.get("doc_rr", 0.0)) for record in doc_records])
+    page_metrics["mrr@10"] = average([float(record.get("page_rr", 0.0)) for record in page_records])
+    doc_metrics["scored_rows"] = float(len(doc_records))
+    page_metrics["scored_rows"] = float(len(page_records))
     return {"doc": doc_metrics, "page": page_metrics}
 
 
