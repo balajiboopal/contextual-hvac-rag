@@ -89,3 +89,38 @@ def test_format_for_whatsapp_strips_broken_numeric_citation_tokens() -> None:
     formatted = format_for_whatsapp(source_text)
 
     assert formatted == "Regular maintenance is required. Always inspect the unit."
+
+
+def test_format_for_whatsapp_strips_empty_citations_and_table_header_rows() -> None:
+    source_text = """
+    | Key Training Areas and Requirements | Specific Details |
+    |-------------------------------------|------------------|
+    | *Employee Training Foundation* | Employees must be trained in safe work practices[] |
+    """
+
+    formatted = format_for_whatsapp(source_text)
+
+    assert "*Employee Training Foundation*" in formatted
+    assert "Employees must be trained in safe work practices." in formatted
+    assert "Specific Details" not in formatted
+    assert "[]" not in formatted
+
+
+def test_format_for_whatsapp_suppresses_generic_labels_and_repairs_step_markers() -> None:
+    source_text = """
+    Filter Cleaning Steps:
+    . Step
+    Action.
+    . 4
+    Clean the filter using a vacuum cleaner.
+    ■ Insert the air cleaning filter.
+    """
+
+    formatted = format_for_whatsapp(source_text)
+
+    assert "*Filter Cleaning Steps*" in formatted
+    assert "\n- Step" not in formatted
+    assert "\nAction.\n" not in f"\n{formatted}\n"
+    assert "4. Clean the filter using a vacuum cleaner." in formatted
+    assert "- Insert the air cleaning filter." in formatted
+    assert "■" not in formatted

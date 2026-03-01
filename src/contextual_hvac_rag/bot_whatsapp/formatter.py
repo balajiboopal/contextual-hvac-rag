@@ -9,10 +9,12 @@ BROKEN_CITATION_PATTERN = re.compile(r"(?:[0-9¹²³⁴⁵⁶⁷⁸⁹⁰]+\(\))
 MARKDOWN_HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*$")
 STAR_HEADING_PATTERN = re.compile(r"^\*{1,2}(.+?)\*{1,2}$")
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\|?\s*[:\-| ]+\|?\s*$")
-LEADING_BULLET_PATTERN = re.compile(r"^(?:[.\-•·●▪]|â€¢)\s+")
+LEADING_BULLET_PATTERN = re.compile(r"^(?:[.\-•·●▪■□▣]|â€¢)\s+")
 STAR_TOKEN_PATTERN = re.compile(r"\*{1,2}([^*]+?)\*{1,2}")
 INLINE_BULLET_SPLIT_PATTERN = re.compile(r"\s*[•·]\s*")
+EMPTY_CITATION_PATTERN = re.compile(r"\[\]")
 SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
+BULLETED_HEADING_PATTERN = re.compile(r"^-\s+\*{1,2}(.+?)\*{1,2}$")
 
 
 def format_for_whatsapp(text: str) -> str:
@@ -23,14 +25,19 @@ def format_for_whatsapp(text: str) -> str:
 
     cleaned_text = CITATION_PATTERN.sub("", text)
     cleaned_text = BROKEN_CITATION_PATTERN.sub("", cleaned_text)
+    cleaned_text = EMPTY_CITATION_PATTERN.sub("", cleaned_text)
     cleaned_text = re.sub(r" {2,}", " ", cleaned_text)
     output_lines: list[str] = []
     pending_table_header: str | None = None
+    pending_step_number: str | None = None
     in_table_body = False
 
     for raw_line in cleaned_text.splitlines():
         line = raw_line.strip()
         if not line:
+            if pending_step_number is not None:
+                output_lines.append(f"{pending_step_number}.")
+                pending_step_number = None
             if pending_table_header:
                 _append_heading(output_lines, pending_table_header)
                 pending_table_header = None
@@ -41,6 +48,9 @@ def format_for_whatsapp(text: str) -> str:
 
         heading_match = MARKDOWN_HEADING_PATTERN.match(line)
         if heading_match:
+            if pending_step_number is not None:
+                output_lines.append(f"{pending_step_number}.")
+                pending_step_number = None
             if pending_table_header:
                 _append_heading(output_lines, pending_table_header)
                 pending_table_header = None
@@ -50,6 +60,9 @@ def format_for_whatsapp(text: str) -> str:
 
         special_heading = _extract_tableish_heading(line)
         if special_heading:
+            if pending_step_number is not None:
+                output_lines.append(f"{pending_step_number}.")
+                pending_step_number = None
             if pending_table_header:
                 _append_heading(output_lines, pending_table_header)
                 pending_table_header = None
@@ -59,6 +72,9 @@ def format_for_whatsapp(text: str) -> str:
 
         star_heading_match = STAR_HEADING_PATTERN.match(line)
         if star_heading_match:
+            if pending_step_number is not None:
+                output_lines.append(f"{pending_step_number}.")
+                pending_step_number = None
             if pending_table_header:
                 _append_heading(output_lines, pending_table_header)
                 pending_table_header = None
@@ -67,6 +83,9 @@ def format_for_whatsapp(text: str) -> str:
             continue
 
         if "|" in line and (line.startswith("|") or line.endswith("|")):
+            if pending_step_number is not None:
+                output_lines.append(f"{pending_step_number}.")
+                pending_step_number = None
             cells = [cell.strip() for cell in line.strip("|").split("|")]
             cells = [cell for cell in cells if cell]
             if not cells:
@@ -82,6 +101,12 @@ def format_for_whatsapp(text: str) -> str:
                     pending_table_header = cells[0]
                 else:
                     output_lines.append(_normalize_bullets(cells[0]))
+                continue
+            header_heading = _extract_pipe_header_heading(cells)
+            if header_heading is not None:
+                if header_heading:
+                    _append_heading(output_lines, header_heading)
+                in_table_body = True
                 continue
             pipe_rows = _format_pipe_table_row(
                 [_normalize_bullets(cell) for cell in cells],
@@ -100,9 +125,23 @@ def format_for_whatsapp(text: str) -> str:
         in_table_body = False
 
         normalized_line = _normalize_bullets(line)
+        if _is_generic_table_label(normalized_line):
+            continue
+        numeric_step = _extract_numeric_step(normalized_line)
+        if numeric_step is not None:
+            pending_step_number = numeric_step
+            continue
+        if pending_step_number is not None:
+            output_lines.append(f"{pending_step_number}. {normalized_line}")
+            pending_step_number = None
+            continue
         structured_rows = _format_task_style_row(normalized_line)
         if structured_rows is not None:
             output_lines.extend(structured_rows)
+            continue
+        bulleted_heading_match = BULLETED_HEADING_PATTERN.match(normalized_line)
+        if bulleted_heading_match:
+            _append_heading(output_lines, bulleted_heading_match.group(1).strip())
             continue
         if _is_heading_like(normalized_line):
             _append_heading(output_lines, normalized_line.rstrip(":"))
@@ -111,6 +150,8 @@ def format_for_whatsapp(text: str) -> str:
 
     if pending_table_header:
         _append_heading(output_lines, pending_table_header)
+    if pending_step_number is not None:
+        output_lines.append(f"{pending_step_number}.")
 
     return _collapse_blank_lines(output_lines)
 
@@ -168,6 +209,32 @@ def _is_heading_like(line: str) -> bool:
     return line.endswith(":")
 
 
+def _is_generic_table_label(line: str) -> bool:
+    """Return whether a line is a generic table label that should be suppressed."""
+
+    normalized = line.strip().lstrip("-").strip().rstrip(".:").casefold()
+    return normalized in {
+        "action",
+        "actions",
+        "details",
+        "frequency",
+        "frequency description",
+        "key requirements and standards",
+        "specific details",
+        "step",
+        "steps",
+    }
+
+
+def _extract_numeric_step(line: str) -> str | None:
+    """Return a bare step number when a line only contains a numbered marker."""
+
+    match = re.fullmatch(r"-?\s*(\d{1,3})[.)]?", line.strip())
+    if match:
+        return match.group(1)
+    return None
+
+
 def _append_heading(output_lines: list[str], heading_text: str) -> None:
     """Append a heading with clear visual separation."""
 
@@ -199,6 +266,40 @@ def _extract_tableish_heading(line: str) -> str | None:
         if heading.casefold().endswith(" task"):
             heading = f"{heading}s"
         return heading
+    return None
+
+
+def _extract_pipe_header_heading(cells: list[str]) -> str | None:
+    """Treat common two-column table headers as section headings instead of content."""
+
+    if len(cells) != 2:
+        return None
+
+    left = _normalize_bullets(cells[0]).strip()
+    right = _normalize_bullets(cells[1]).strip()
+    left_normalized = left.casefold()
+    right_normalized = right.casefold().replace("/", " ")
+
+    if (
+        left_normalized in {"step", "steps", "task", "tasks", "category"}
+        and right_normalized in {
+            "action",
+            "actions",
+            "details",
+            "description",
+            "frequency description",
+            "specific details",
+            "key requirements and standards",
+        }
+    ):
+        return ""
+
+    if any(
+        keyword in right_normalized
+        for keyword in ("details", "requirements", "actions", "description", "frequency", "standards")
+    ):
+        return left
+
     return None
 
 

@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Suppressed generic table-label artifacts like `Step`, `Action`, and `Specific Details`, normalized isolated numeric step markers, and cleaned square-bullet glyphs in WhatsApp replies.
 - Fixed the WhatsApp formatter to strip malformed numeric citation remnants like `1()` and `¹()` that were leaking into final replies.
 - Changed the WhatsApp reply path back to a single outbound message per user query, collapsing any internal formatting segments before sending.
 - Disabled the WhatsApp bot's style prompt by default after it was shown to interfere with grounded retrieval for otherwise valid datastore queries.
