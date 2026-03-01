@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     bot_sqlite_path: Path = Path("./data/whatsapp_bot.sqlite3")
     bot_conversation_mode: Literal["stateful", "stateless"] = "stateful"
     bot_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"
+    eval_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"
     bot_response_cache_ttl_seconds: int = 300
     bot_reply_chunk_chars: int = 1200
     bot_retrieval_preview_count: int = 3

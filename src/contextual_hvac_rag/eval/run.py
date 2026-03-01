@@ -67,7 +67,10 @@ def run_evaluation(
         per_query_path.unlink()
 
     artifacts: list[QueryEvaluationArtifact] = []
-    with ContextualClient(settings) as client:
+    with ContextualClient(
+        settings,
+        agent_query_mode=settings.eval_contextual_query_mode,
+    ) as client:
         for row in rows:
             artifact = _evaluate_single_row(
                 client=client,
@@ -195,6 +198,9 @@ def build_summary(artifacts: list[QueryEvaluationArtifact]) -> dict[str, Any]:
     latency_summary = summarize_latencies([artifact.latencies for artifact in artifacts])
     return {
         "retrieval": overall,
+        "metric_notes": {
+            "page_ndcg": "Page nDCG uses graded relevance: rel=2 for exact page or anchor-text hit, rel=1 for correct document with wrong or unknown page, rel=0 otherwise."
+        },
         "by_difficulty": by_difficulty,
         "by_gold_sources": by_source,
         "by_gold_source": by_source,
@@ -313,6 +319,11 @@ def _print_console_summary(*, summary: dict[str, Any], total_queries: int, out_d
         doc_value = retrieval["doc"].get(metric_key, 0.0)
         page_value = retrieval["page"].get(metric_key, 0.0)
         typer.echo(f"{metric_key:<18} {doc_value:>5.3f}     {page_value:>5.3f}")
+    metric_notes = summary.get("metric_notes", {})
+    page_ndcg_note = metric_notes.get("page_ndcg")
+    if isinstance(page_ndcg_note, str) and page_ndcg_note:
+        typer.echo("")
+        typer.echo(f"Note: {page_ndcg_note}")
     typer.echo("")
     typer.echo(f"Per-PDF breakdowns: {len(by_source)}")
     typer.echo(f"Per-query JSONL: {out_dir / 'per_query_results.jsonl'}")

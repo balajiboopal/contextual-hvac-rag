@@ -36,6 +36,12 @@ contextual-hvac-rag eval \
   --anchor-threshold 80
 ```
 
+The evaluator uses direct `query/acl` mode by default for faster runs with ACL-enabled agents. Override it with:
+
+```env
+EVAL_CONTEXTUAL_QUERY_MODE=auto
+```
+
 Run only a quick subset during smoke testing:
 
 ```bash
@@ -93,6 +99,8 @@ Page-wise graded relevance:
 - `2` for exact page hit (or anchor-text fallback hit)
 - `1` for correct document but wrong or unknown page
 - `0` otherwise
+
+Because of that grading, page `nDCG` can still be high even when page `Recall@k` is low. A correct document retrieved on the wrong page still earns partial page relevance (`rel=1`).
 
 ## Latency
 

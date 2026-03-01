@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from contextual_hvac_rag.eval.loader import GoldenDatasetRow
-from contextual_hvac_rag.eval.run import _aggregate_metrics, _is_doc_scorable, _is_page_scorable
+from contextual_hvac_rag.eval.run import (
+    _aggregate_metrics,
+    _is_doc_scorable,
+    _is_page_scorable,
+    build_summary,
+    QueryEvaluationArtifact,
+)
 
 
 def test_scoring_eligibility_uses_available_gold_fields() -> None:
@@ -99,3 +105,39 @@ def test_aggregate_metrics_ignores_unrated_rows() -> None:
     assert summary["page"]["mrr@10"] == 0.5
     assert summary["doc"]["scored_rows"] == 1.0
     assert summary["page"]["scored_rows"] == 1.0
+
+
+def test_build_summary_includes_page_ndcg_metric_note() -> None:
+    artifact = QueryEvaluationArtifact(
+        record={
+            "doc_scored": True,
+            "page_scored": True,
+            "doc_hit@1": True,
+            "page_hit@1": False,
+            "doc_ndcg@1": 1.0,
+            "page_ndcg@1": 1.0,
+            "doc_hit@3": True,
+            "page_hit@3": False,
+            "doc_ndcg@3": 1.0,
+            "page_ndcg@3": 1.0,
+            "doc_hit@5": True,
+            "page_hit@5": False,
+            "doc_ndcg@5": 1.0,
+            "page_ndcg@5": 1.0,
+            "doc_hit@10": True,
+            "page_hit@10": False,
+            "doc_ndcg@10": 1.0,
+            "page_ndcg@10": 1.0,
+            "doc_rr": 1.0,
+            "page_rr": 0.0,
+        },
+        difficulty="Easy",
+        gold_source="manual.pdf",
+        latencies={"total": 1.0, "embed": None, "search": None, "rerank": None, "generate": None},
+    )
+
+    summary = build_summary([artifact])
+
+    assert "metric_notes" in summary
+    assert "page_ndcg" in summary["metric_notes"]
+    assert "rel=1" in summary["metric_notes"]["page_ndcg"]
