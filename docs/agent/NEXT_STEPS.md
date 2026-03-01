@@ -32,8 +32,10 @@
 - [x] Apply concise WhatsApp-oriented response guidance before querying the agent.
 - [x] Make the WhatsApp style prompt opt-in after confirming it can interfere with retrieval for some grounded queries.
 - [x] Add the initial gated voice implementation scaffold with audio parsing, optional STT/TTS modules, and safe text fallbacks.
+- [x] Add an optional Google Cloud WaveNet TTS backend for faster managed voice replies.
 - [ ] Wire a real `Indic-TTS` backend instead of the current placeholder fallback path.
 - [ ] Add integration tests for Meta media download/upload and voice-note reply sending.
+- [ ] Add a short-answer voice policy so long responses fall back to text instead of slow multi-minute synthesis.
 - [ ] Add an integration test that locks the known Contextual agent response schema.
 - [ ] Add signature validation for Meta webhook requests if enabled for the app.
 - [ ] Add async queueing if webhook load grows beyond simple background tasks.

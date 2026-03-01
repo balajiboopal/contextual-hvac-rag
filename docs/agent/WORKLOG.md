@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added an optional Google Cloud WaveNet TTS backend so WhatsApp voice replies can use faster managed synthesis instead of the slower local CPU-only Parler path.
 - Added the first additive voice implementation slice: eval-result outputs are ignored in git, inbound audio is parsed, voice settings are configurable, STT/TTS/media helper modules are in place, and audio requests now fall back to text safely when voice processing fails.
 - Added a reusable voice-pipeline blueprint and copy-paste agent prompt covering free-model STT/TTS, Indian language support, and a staged WhatsApp voice rollout plan.
 - Added a reusable markdown blueprint and a copy-paste agent prompt so the exact evaluation pipeline can be recreated in the open-source variant of this project.

@@ -39,8 +39,11 @@ class Settings(BaseSettings):
     bot_stt_model_size: str = "small"
     bot_stt_device: str = "cpu"
     bot_stt_compute_type: str = "int8"
-    bot_tts_default_backend: Literal["indic_tts", "indic_parler"] = "indic_tts"
-    bot_tts_fallback_backend: Literal["indic_tts", "indic_parler"] = "indic_parler"
+    bot_tts_default_backend: Literal["indic_tts", "indic_parler", "google_wavenet"] = "indic_tts"
+    bot_tts_fallback_backend: Literal["indic_tts", "indic_parler", "google_wavenet"] = "indic_parler"
+    google_tts_language_code: str = ""
+    google_tts_voice_name: str = ""
+    google_tts_speaking_rate: float = 1.0
     bot_temp_dir: Path = Path("./data/tmp_audio")
     ffmpeg_binary: str = "ffmpeg"
     eval_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"

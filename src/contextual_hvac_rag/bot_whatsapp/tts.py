@@ -40,6 +40,8 @@ class VoiceSynthesizer:
         last_error: VoiceProcessingError | None = None
         for backend in backends:
             try:
+                if backend == "google_wavenet":
+                    return self._synthesize_with_google_wavenet(text=text, language=language)
                 if backend == "indic_parler":
                     return self._synthesize_with_indic_parler(text=text, language=language)
                 if backend == "indic_tts":
@@ -52,6 +54,69 @@ class VoiceSynthesizer:
                 continue
 
         raise last_error or VoiceProcessingError("No TTS backend could synthesize the reply.")
+
+    def _synthesize_with_google_wavenet(
+        self,
+        *,
+        text: str,
+        language: str | None,
+    ) -> SynthesizedSpeech:
+        """Generate audio using Google Cloud Text-to-Speech WaveNet voices."""
+
+        started_at = time.perf_counter()
+        try:
+            from google.cloud import texttospeech
+        except ImportError as exc:
+            raise VoiceProcessingError(
+                "Google Cloud Text-to-Speech is not installed. Install the voice extras with "
+                "`pip install -e \".[voice]\"` to enable the google_wavenet backend."
+            ) from exc
+
+        try:
+            language_code, voice_name = _resolve_google_voice(
+                settings=self._settings,
+                detected_language=language,
+            )
+            client = texttospeech.TextToSpeechClient()
+            input_text = text[:4500]
+            response = client.synthesize_speech(
+                request=texttospeech.SynthesizeSpeechRequest(
+                    input=texttospeech.SynthesisInput(text=input_text),
+                    voice=texttospeech.VoiceSelectionParams(
+                        language_code=language_code,
+                        name=voice_name,
+                    ),
+                    audio_config=texttospeech.AudioConfig(
+                        audio_encoding=texttospeech.AudioEncoding.MP3,
+                        speaking_rate=self._settings.google_tts_speaking_rate,
+                    ),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise VoiceProcessingError(
+                "Google WaveNet TTS failed. Ensure Google Cloud TTS is enabled and "
+                "application default credentials are configured."
+            ) from exc
+
+        if not response.audio_content:
+            raise VoiceProcessingError("Google WaveNet TTS did not return audio content.")
+
+        self._settings.bot_temp_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            suffix=".mp3",
+            prefix="tts_google_",
+            dir=self._settings.bot_temp_dir,
+            delete=False,
+        ) as handle:
+            handle.write(response.audio_content)
+            output_path = Path(handle.name)
+
+        return SynthesizedSpeech(
+            audio_path=output_path,
+            backend="google_wavenet",
+            latency_ms=(time.perf_counter() - started_at) * 1000.0,
+        )
 
     def _synthesize_with_indic_parler(
         self,
@@ -143,3 +208,40 @@ def _build_voice_description(language: str | None) -> str:
         "A clear, natural, helpful voice. "
         "The speech is calm, conversational, and suitable for a WhatsApp voice reply."
     )
+
+
+def _resolve_google_voice(
+    *,
+    settings: Settings,
+    detected_language: str | None,
+) -> tuple[str, str]:
+    """Resolve the Google TTS language code and WaveNet voice name."""
+
+    language_code = settings.google_tts_language_code.strip()
+    if not language_code:
+        language_code = _guess_google_language_code(detected_language)
+
+    voice_name = settings.google_tts_voice_name.strip()
+    if not voice_name:
+        voice_name = f"{language_code}-Wavenet-A"
+
+    return language_code, voice_name
+
+
+def _guess_google_language_code(detected_language: str | None) -> str:
+    """Best-effort map a short language tag to a Google TTS language code."""
+
+    normalized = (detected_language or "").strip().lower()
+    mapping = {
+        "bn": "bn-IN",
+        "en": "en-IN",
+        "gu": "gu-IN",
+        "hi": "hi-IN",
+        "kn": "kn-IN",
+        "ml": "ml-IN",
+        "mr": "mr-IN",
+        "ta": "ta-IN",
+        "te": "te-IN",
+        "ur": "ur-IN",
+    }
+    return mapping.get(normalized, "en-IN")

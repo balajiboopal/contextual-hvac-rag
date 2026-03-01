@@ -93,6 +93,7 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
   - `BOT_RESPONSE_STYLE_PROMPT` is optional and should be left blank unless you have verified it does not reduce retrieval quality for your agent.
   - Optional voice support is scaffolded behind `BOT_ENABLE_VOICE=false` and requires the voice extras plus `ffmpeg`.
   - The current initial voice implementation supports inbound audio parsing, STT via `faster-whisper`, and safe text fallbacks if STT/TTS cannot complete.
+  - For faster voice replies, the `google_wavenet` TTS backend is available via Google Cloud Text-to-Speech. It requires `google-cloud-texttospeech`, application default credentials, and a valid WaveNet voice such as `en-IN-Wavenet-A`.
   - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.
 - `src/contextual_hvac_rag/cli.py`: Typer entry point.
 - `eval/`: golden-dataset evaluation docs and sample artifacts.
