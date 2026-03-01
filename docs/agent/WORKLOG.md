@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Added the first additive voice implementation slice: eval-result outputs are ignored in git, inbound audio is parsed, voice settings are configurable, STT/TTS/media helper modules are in place, and audio requests now fall back to text safely when voice processing fails.
 - Added a reusable voice-pipeline blueprint and copy-paste agent prompt covering free-model STT/TTS, Indian language support, and a staged WhatsApp voice rollout plan.
 - Added a reusable markdown blueprint and a copy-paste agent prompt so the exact evaluation pipeline can be recreated in the open-source variant of this project.
 - Set the evaluation pipeline to use direct ACL agent queries by default and added explicit metric notes clarifying that page nDCG gives partial credit for correct-document/wrong-page retrievals.

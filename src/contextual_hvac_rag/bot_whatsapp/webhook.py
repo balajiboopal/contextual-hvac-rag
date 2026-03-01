@@ -16,6 +16,8 @@ class InboundMessage:
     wa_id: str
     text: str
     timestamp: int
+    message_type: str = "text"
+    audio_media_id: str | None = None
 
 
 def verify_webhook_token(
@@ -74,12 +76,19 @@ def parse_inbound_messages(payload: dict[str, Any]) -> list[InboundMessage]:
 
                 message_type = raw_message.get("type", "")
                 text = ""
+                audio_media_id: str | None = None
                 if message_type == "text":
                     text_payload = raw_message.get("text", {})
                     if isinstance(text_payload, dict):
                         text_value = text_payload.get("body", "")
                         if isinstance(text_value, str):
                             text = text_value.strip()
+                elif message_type == "audio":
+                    audio_payload = raw_message.get("audio", {})
+                    if isinstance(audio_payload, dict):
+                        raw_audio_id = audio_payload.get("id")
+                        if isinstance(raw_audio_id, str) and raw_audio_id.strip():
+                            audio_media_id = raw_audio_id
 
                 messages.append(
                     InboundMessage(
@@ -87,6 +96,8 @@ def parse_inbound_messages(payload: dict[str, Any]) -> list[InboundMessage]:
                         wa_id=wa_id,
                         text=text,
                         timestamp=timestamp,
+                        message_type=message_type if isinstance(message_type, str) else "text",
+                        audio_media_id=audio_media_id,
                     )
                 )
     return messages

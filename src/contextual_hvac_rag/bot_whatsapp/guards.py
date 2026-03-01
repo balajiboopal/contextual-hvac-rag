@@ -26,10 +26,10 @@ class InboundTrigger:
 
 
 def ensure_non_template_message(message_type: str) -> None:
-    """Block all non-text and template message attempts."""
+    """Block template sends while allowing supported direct-reply message types."""
 
-    if message_type != "text":
-        raise GuardViolation("Only plain text replies are allowed by policy.")
+    if message_type not in {"text", "audio"}:
+        raise GuardViolation("Only direct text or audio replies are allowed by policy.")
 
 
 def ensure_inbound_reply_allowed(
@@ -66,4 +66,3 @@ def ensure_inbound_reply_allowed(
             trigger.wa_id,
         )
         raise GuardViolation("The user is outside the 24-hour customer service window.")
-

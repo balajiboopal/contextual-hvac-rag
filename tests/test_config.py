@@ -25,3 +25,5 @@ def test_bot_defaults_favor_sqlite_and_stateful_memory() -> None:
     assert settings.bot_store_backend == "sqlite"
     assert settings.bot_conversation_mode == "stateful"
     assert settings.bot_response_style_prompt == ""
+    assert settings.bot_enable_voice is False
+    assert settings.bot_voice_reply_mode == "audio"

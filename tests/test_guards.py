@@ -8,6 +8,7 @@ from contextual_hvac_rag.bot_whatsapp.guards import (
     GuardViolation,
     InboundTrigger,
     ensure_inbound_reply_allowed,
+    ensure_non_template_message,
 )
 from contextual_hvac_rag.bot_whatsapp.store import InMemoryStore
 
@@ -35,3 +36,9 @@ def test_inbound_reply_allows_recent_trigger() -> None:
 
     ensure_inbound_reply_allowed(trigger=trigger, store=store, now_ts=250)
 
+
+def test_non_template_message_allows_audio_and_blocks_templates() -> None:
+    ensure_non_template_message("audio")
+
+    with pytest.raises(GuardViolation):
+        ensure_non_template_message("template")

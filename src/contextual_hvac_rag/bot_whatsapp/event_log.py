@@ -19,6 +19,9 @@ def append_agent_event_log(
     formatted_reply: str,
     cache_hit: bool,
     reply_chunk_count: int,
+    user_text_override: str | None = None,
+    reply_mode: str = "text",
+    detected_language: str | None = None,
 ) -> Path:
     """Append a structured bot interaction record for later evaluation."""
 
@@ -29,7 +32,11 @@ def append_agent_event_log(
         "wa_id": inbound_message.wa_id,
         "wa_message_id": inbound_message.message_id,
         "wa_message_ts": inbound_message.timestamp,
-        "user_text": inbound_message.text,
+        "wa_message_type": inbound_message.message_type,
+        "wa_audio_media_id": inbound_message.audio_media_id,
+        "user_text": user_text_override if user_text_override is not None else inbound_message.text,
+        "reply_mode": reply_mode,
+        "detected_language": detected_language,
         "contextual_conversation_id": result.conversation_id,
         "contextual_message_id": result.message_id,
         "raw_answer_text": result.answer_text,

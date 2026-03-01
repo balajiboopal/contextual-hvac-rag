@@ -11,6 +11,12 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
    pip install -e ".[dev]"
    ```
 
+   Optional voice support dependencies:
+
+   ```bash
+   pip install -e ".[dev,voice]"
+   ```
+
 3. Copy `.env.example` to `.env` and fill in required values:
 
    - `CONTEXTUAL_API_KEY`
@@ -85,6 +91,8 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
   - Replies are normalized into WhatsApp-friendly plain text and sent as a single outbound WhatsApp message.
   - Bot memory can run `stateful` (conversation reuse) or `stateless` (lower latency, better cache reuse).
   - `BOT_RESPONSE_STYLE_PROMPT` is optional and should be left blank unless you have verified it does not reduce retrieval quality for your agent.
+  - Optional voice support is scaffolded behind `BOT_ENABLE_VOICE=false` and requires the voice extras plus `ffmpeg`.
+  - The current initial voice implementation supports inbound audio parsing, STT via `faster-whisper`, and safe text fallbacks if STT/TTS cannot complete.
   - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.
 - `src/contextual_hvac_rag/cli.py`: Typer entry point.
 - `eval/`: golden-dataset evaluation docs and sample artifacts.

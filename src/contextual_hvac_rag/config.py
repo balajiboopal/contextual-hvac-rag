@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     bot_sqlite_path: Path = Path("./data/whatsapp_bot.sqlite3")
     bot_conversation_mode: Literal["stateful", "stateless"] = "stateful"
     bot_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"
+    bot_enable_voice: bool = False
+    bot_voice_reply_mode: Literal["audio", "text", "auto"] = "audio"
+    bot_stt_model_size: str = "small"
+    bot_stt_device: str = "cpu"
+    bot_stt_compute_type: str = "int8"
+    bot_tts_default_backend: Literal["indic_tts", "indic_parler"] = "indic_tts"
+    bot_tts_fallback_backend: Literal["indic_tts", "indic_parler"] = "indic_parler"
+    bot_temp_dir: Path = Path("./data/tmp_audio")
+    ffmpeg_binary: str = "ffmpeg"
     eval_contextual_query_mode: Literal["auto", "query", "query_acl"] = "query_acl"
     bot_response_cache_ttl_seconds: int = 300
     bot_reply_chunk_chars: int = 1200

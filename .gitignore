@@ -35,4 +35,4 @@ logs/
 *.db
 *.jsonl
 !eval/sample_eval.jsonl
-
+eval/results*/

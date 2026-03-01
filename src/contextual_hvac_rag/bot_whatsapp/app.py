@@ -4,17 +4,28 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from contextual_hvac_rag.bot_whatsapp.audio_convert import (
+    AudioConversionError,
+    cleanup_temp_files,
+    convert_for_transcription,
+    convert_for_whatsapp_voice,
+    write_temp_audio_file,
+)
 from contextual_hvac_rag.bot_whatsapp.cache import CachedAgentResponse, ResponseCache, build_cache_key
 from contextual_hvac_rag.bot_whatsapp.cloud_api import WhatsAppCloudAPI
 from contextual_hvac_rag.bot_whatsapp.event_log import append_agent_event_log
 from contextual_hvac_rag.bot_whatsapp.formatter import format_reply_chunks
 from contextual_hvac_rag.bot_whatsapp.guards import GuardViolation
+from contextual_hvac_rag.bot_whatsapp.media import MediaTransferError, WhatsAppMediaClient
 from contextual_hvac_rag.bot_whatsapp.store import InMemoryStore, SQLiteStore, StoreProtocol
+from contextual_hvac_rag.bot_whatsapp.stt import FasterWhisperTranscriber, VoiceProcessingError
+from contextual_hvac_rag.bot_whatsapp.tts import SynthesizedSpeech, VoiceSynthesizer
 from contextual_hvac_rag.bot_whatsapp.webhook import (
     InboundMessage,
     parse_inbound_messages,
@@ -46,6 +57,9 @@ CONTEXTUAL_CLIENT = ContextualClient(
 )
 RESPONSE_CACHE = ResponseCache(ttl_seconds=SETTINGS.bot_response_cache_ttl_seconds)
 WHATSAPP_API = WhatsAppCloudAPI(SETTINGS)
+MEDIA_CLIENT = WhatsAppMediaClient(SETTINGS)
+VOICE_TRANSCRIBER = FasterWhisperTranscriber(SETTINGS)
+VOICE_SYNTHESIZER = VoiceSynthesizer(SETTINGS)
 app = FastAPI(title="Contextual HVAC WhatsApp Bot")
 
 
@@ -56,6 +70,7 @@ def shutdown_event() -> None:
     STORE.close()
     CONTEXTUAL_CLIENT.close()
     WHATSAPP_API.close()
+    MEDIA_CLIENT.close()
 
 
 @app.get("/healthz")
@@ -70,6 +85,8 @@ def healthcheck() -> JSONResponse:
             "bot_store_backend": SETTINGS.bot_store_backend,
             "bot_conversation_mode": SETTINGS.bot_conversation_mode,
             "bot_contextual_query_mode": SETTINGS.bot_contextual_query_mode,
+            "bot_enable_voice": SETTINGS.bot_enable_voice,
+            "bot_voice_reply_mode": SETTINGS.bot_voice_reply_mode,
             "bot_response_cache_ttl_seconds": SETTINGS.bot_response_cache_ttl_seconds,
             "bot_reply_chunk_chars": SETTINGS.bot_reply_chunk_chars,
             "bot_cache_enabled": _is_cache_enabled(),
@@ -135,6 +152,16 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
     for message in messages:
         try:
             STORE.set_last_user_message_ts(message.wa_id, message.timestamp)
+            if message.message_type == "audio":
+                if not SETTINGS.bot_enable_voice:
+                    LOGGER.info(
+                        "Ignoring inbound audio message for %s because voice support is disabled.",
+                        message.wa_id,
+                    )
+                    continue
+                _process_audio_message(message)
+                continue
+
             if not message.text:
                 LOGGER.info(
                     "Ignoring unsupported inbound message type for %s (message_id=%s)",
@@ -143,94 +170,23 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
                 )
                 continue
 
-            conversation_id = _get_conversation_id_for_message(message.wa_id)
-            cache_enabled = _is_cache_enabled()
-            cache_key = build_cache_key(wa_id=message.wa_id, text=message.text) if cache_enabled else ""
-            cache_started_at = time.perf_counter()
-            cached_response = RESPONSE_CACHE.get(cache_key) if cache_enabled else None
-            cache_hit = cached_response is not None
-            if cached_response is not None:
-                result = _build_cached_result(
-                    conversation_id=conversation_id,
-                    cached_response=cached_response,
-                    total_elapsed_ms=(time.perf_counter() - cache_started_at) * 1000.0,
-                )
-                LOGGER.info(
-                    "Serving cached Contextual response for %s (cache_ttl_seconds=%s)",
-                    message.wa_id,
-                    SETTINGS.bot_response_cache_ttl_seconds,
-                )
-            else:
-                result = CONTEXTUAL_CLIENT.query_agent(
-                    message=message.text,
-                    conversation_id=conversation_id,
-                    system_prompt=SETTINGS.bot_response_style_prompt,
-                )
-                if cache_enabled and result.answer_text.strip():
-                    RESPONSE_CACHE.set(
-                        cache_key,
-                        CachedAgentResponse(
-                            answer_text=result.answer_text,
-                            attributions=result.attributions,
-                            retrieval_contents=result.retrieval_contents,
-                        ),
-                    )
-
-            _log_retrieval_preview(
+            result, cache_hit = _query_text_request(
                 wa_id=message.wa_id,
-                retrieval_contents=result.retrieval_contents,
+                user_text=message.text,
             )
-            _log_agent_latencies(
-                wa_id=message.wa_id,
-                latency_ms=result.latency_ms,
-                cache_hit=cache_hit,
-            )
-
-            if result.conversation_id and not cache_hit and SETTINGS.bot_conversation_mode == "stateful":
-                STORE.set_conversation_id(message.wa_id, result.conversation_id)
-
-            reply_segments = format_reply_chunks(
-                result.answer_text,
-                max_chars=SETTINGS.bot_reply_chunk_chars,
-            )
-            if not reply_segments:
-                reply_segments = ["I could not generate a response for that request."]
-            if len(reply_segments) > 1:
-                LOGGER.info(
-                    "Collapsing %s formatted reply segments into one WhatsApp message for %s",
-                    len(reply_segments),
-                    message.wa_id,
-                )
-            formatted_reply = "\n\n".join(reply_segments)
-
-            log_path = append_agent_event_log(
-                settings=SETTINGS,
-                inbound_message=message,
+            _log_and_send_text_reply(
+                message=message,
                 result=result,
-                formatted_reply=formatted_reply,
                 cache_hit=cache_hit,
-                reply_chunk_count=1,
-            )
-            LOGGER.info(
-                "Stored WhatsApp agent event for %s at %s (cache_hit=%s, reply_chunks=%s, attributions=%s, retrieval_contents=%s)",
-                message.wa_id,
-                log_path,
-                cache_hit,
-                1,
-                len(result.attributions),
-                len(result.retrieval_contents),
-            )
-
-            WHATSAPP_API.send_text_reply(
-                wa_id=message.wa_id,
-                text=formatted_reply,
-                trigger=to_inbound_trigger(message),
-                store=STORE,
+                user_text=message.text,
             )
         except GuardViolation as exc:
             LOGGER.warning("Blocked WhatsApp reply for %s: %s", message.wa_id, exc)
         except ContextualClientError as exc:
             LOGGER.error("Contextual query failed for %s: %s", message.wa_id, exc)
+        except (AudioConversionError, MediaTransferError, VoiceProcessingError) as exc:
+            LOGGER.warning("Voice processing failed for %s: %s", message.wa_id, exc)
+            _send_voice_failure_fallback(message)
         except Exception:  # noqa: BLE001
             LOGGER.exception("Unhandled error while processing message %s", message.message_id)
 
@@ -253,6 +209,284 @@ def _build_cached_result(
         latency_ms=extract_latency_ms(payload={}, total_elapsed_ms=total_elapsed_ms),
         payload={},
     )
+
+
+def _query_text_request(
+    *,
+    wa_id: str,
+    user_text: str,
+) -> tuple[AgentQueryResult, bool]:
+    """Query Contextual for a user text request, optionally using the cache."""
+
+    conversation_id = _get_conversation_id_for_message(wa_id)
+    cache_enabled = _is_cache_enabled()
+    cache_key = build_cache_key(wa_id=wa_id, text=user_text) if cache_enabled else ""
+    cache_started_at = time.perf_counter()
+    cached_response = RESPONSE_CACHE.get(cache_key) if cache_enabled else None
+    cache_hit = cached_response is not None
+    if cached_response is not None:
+        result = _build_cached_result(
+            conversation_id=conversation_id,
+            cached_response=cached_response,
+            total_elapsed_ms=(time.perf_counter() - cache_started_at) * 1000.0,
+        )
+        LOGGER.info(
+            "Serving cached Contextual response for %s (cache_ttl_seconds=%s)",
+            wa_id,
+            SETTINGS.bot_response_cache_ttl_seconds,
+        )
+        return result, True
+
+    result = CONTEXTUAL_CLIENT.query_agent(
+        message=user_text,
+        conversation_id=conversation_id,
+        system_prompt=SETTINGS.bot_response_style_prompt,
+    )
+    if cache_enabled and result.answer_text.strip():
+        RESPONSE_CACHE.set(
+            cache_key,
+            CachedAgentResponse(
+                answer_text=result.answer_text,
+                attributions=result.attributions,
+                retrieval_contents=result.retrieval_contents,
+            ),
+        )
+    return result, False
+
+
+def _process_audio_message(message: InboundMessage) -> None:
+    """Process a voice note via STT, Contextual, and optional TTS."""
+
+    if not message.audio_media_id:
+        raise VoiceProcessingError("Inbound audio message did not include a media id.")
+
+    raw_audio_path: Path | None = None
+    transcription_input_path: Path | None = None
+    synthesized_wav_path: Path | None = None
+    voice_note_path: Path | None = None
+
+    try:
+        audio_bytes, content_type = MEDIA_CLIENT.download_media(media_id=message.audio_media_id)
+        raw_audio_path = write_temp_audio_file(
+            settings=SETTINGS,
+            data=audio_bytes,
+            suffix=_guess_audio_suffix(content_type),
+            prefix="wa_in_",
+        )
+        transcription_input_path = convert_for_transcription(
+            settings=SETTINGS,
+            input_path=raw_audio_path,
+        )
+        transcription = VOICE_TRANSCRIBER.transcribe_file(audio_path=transcription_input_path)
+        if not transcription.text:
+            _send_voice_failure_fallback(
+                message,
+                custom_text="I could not transcribe that voice note clearly. Please try a shorter or clearer recording.",
+            )
+            return
+
+        LOGGER.info(
+            "Transcribed WhatsApp audio for %s in %.2f ms (language=%s, chars=%s)",
+            message.wa_id,
+            transcription.latency_ms,
+            transcription.language or "unknown",
+            len(transcription.text),
+        )
+
+        result, cache_hit = _query_text_request(
+            wa_id=message.wa_id,
+            user_text=transcription.text,
+        )
+        _log_retrieval_preview(
+            wa_id=message.wa_id,
+            retrieval_contents=result.retrieval_contents,
+        )
+        _log_agent_latencies(
+            wa_id=message.wa_id,
+            latency_ms=result.latency_ms,
+            cache_hit=cache_hit,
+        )
+        if result.conversation_id and not cache_hit and SETTINGS.bot_conversation_mode == "stateful":
+            STORE.set_conversation_id(message.wa_id, result.conversation_id)
+
+        formatted_reply = _format_single_reply(
+            wa_id=message.wa_id,
+            answer_text=result.answer_text,
+        )
+        if _should_send_voice_reply():
+            try:
+                synthesized = VOICE_SYNTHESIZER.synthesize(
+                    text=formatted_reply,
+                    language=transcription.language,
+                )
+                synthesized_wav_path = synthesized.audio_path
+                voice_note_path = convert_for_whatsapp_voice(
+                    settings=SETTINGS,
+                    input_path=synthesized_wav_path,
+                )
+                uploaded_media_id = MEDIA_CLIENT.upload_audio(audio_path=voice_note_path)
+
+                log_path = append_agent_event_log(
+                    settings=SETTINGS,
+                    inbound_message=message,
+                    result=result,
+                    formatted_reply=formatted_reply,
+                    cache_hit=cache_hit,
+                    reply_chunk_count=1,
+                    user_text_override=transcription.text,
+                    reply_mode="audio",
+                    detected_language=transcription.language,
+                )
+                LOGGER.info(
+                    "Stored WhatsApp agent event for %s at %s (cache_hit=%s, reply_mode=audio, attributions=%s, retrieval_contents=%s, tts_ms=%.2f)",
+                    message.wa_id,
+                    log_path,
+                    cache_hit,
+                    len(result.attributions),
+                    len(result.retrieval_contents),
+                    synthesized.latency_ms,
+                )
+
+                WHATSAPP_API.send_audio_reply(
+                    wa_id=message.wa_id,
+                    media_id=uploaded_media_id,
+                    trigger=to_inbound_trigger(message),
+                    store=STORE,
+                )
+                return
+            except (AudioConversionError, MediaTransferError, VoiceProcessingError) as exc:
+                LOGGER.warning(
+                    "Falling back to text reply for %s after voice synthesis failure: %s",
+                    message.wa_id,
+                    exc,
+                )
+
+        _log_and_send_text_reply(
+            message=message,
+            result=result,
+            cache_hit=cache_hit,
+            user_text=transcription.text,
+            detected_language=transcription.language,
+            already_logged=True,
+        )
+    finally:
+        cleanup_temp_files(raw_audio_path, transcription_input_path, synthesized_wav_path, voice_note_path)
+
+
+def _log_and_send_text_reply(
+    *,
+    message: InboundMessage,
+    result: AgentQueryResult,
+    cache_hit: bool,
+    user_text: str,
+    detected_language: str | None = None,
+    already_logged: bool = False,
+) -> None:
+    """Log a response and send it as a single text message."""
+
+    if not already_logged:
+        _log_retrieval_preview(
+            wa_id=message.wa_id,
+            retrieval_contents=result.retrieval_contents,
+        )
+        _log_agent_latencies(
+            wa_id=message.wa_id,
+            latency_ms=result.latency_ms,
+            cache_hit=cache_hit,
+        )
+
+    if result.conversation_id and not cache_hit and SETTINGS.bot_conversation_mode == "stateful":
+        STORE.set_conversation_id(message.wa_id, result.conversation_id)
+
+    formatted_reply = _format_single_reply(
+        wa_id=message.wa_id,
+        answer_text=result.answer_text,
+    )
+
+    log_path = append_agent_event_log(
+        settings=SETTINGS,
+        inbound_message=message,
+        result=result,
+        formatted_reply=formatted_reply,
+        cache_hit=cache_hit,
+        reply_chunk_count=1,
+        user_text_override=user_text,
+        reply_mode="text",
+        detected_language=detected_language,
+    )
+    LOGGER.info(
+        "Stored WhatsApp agent event for %s at %s (cache_hit=%s, reply_mode=text, attributions=%s, retrieval_contents=%s)",
+        message.wa_id,
+        log_path,
+        cache_hit,
+        len(result.attributions),
+        len(result.retrieval_contents),
+    )
+
+    WHATSAPP_API.send_text_reply(
+        wa_id=message.wa_id,
+        text=formatted_reply,
+        trigger=to_inbound_trigger(message),
+        store=STORE,
+    )
+
+
+def _format_single_reply(*, wa_id: str, answer_text: str) -> str:
+    """Format an answer into a single WhatsApp-friendly text payload."""
+
+    reply_segments = format_reply_chunks(
+        answer_text,
+        max_chars=SETTINGS.bot_reply_chunk_chars,
+    )
+    if not reply_segments:
+        reply_segments = ["I could not generate a response for that request."]
+    if len(reply_segments) > 1:
+        LOGGER.info(
+            "Collapsing %s formatted reply segments into one WhatsApp message for %s",
+            len(reply_segments),
+            wa_id,
+        )
+    return "\n\n".join(reply_segments)
+
+
+def _send_voice_failure_fallback(
+    message: InboundMessage,
+    *,
+    custom_text: str | None = None,
+) -> None:
+    """Send a text fallback when voice processing cannot complete."""
+
+    WHATSAPP_API.send_text_reply(
+        wa_id=message.wa_id,
+        text=custom_text or (
+            "I could not process that voice note. Please try again or send the question as text."
+        ),
+        trigger=to_inbound_trigger(message),
+        store=STORE,
+    )
+
+
+def _guess_audio_suffix(content_type: str | None) -> str:
+    """Infer a file suffix from the media content type."""
+
+    if not content_type:
+        return ".bin"
+    normalized = content_type.casefold()
+    if "ogg" in normalized:
+        return ".ogg"
+    if "mpeg" in normalized or "mp3" in normalized:
+        return ".mp3"
+    if "wav" in normalized or "wave" in normalized:
+        return ".wav"
+    if "mp4" in normalized or "m4a" in normalized:
+        return ".m4a"
+    return ".bin"
+
+
+def _should_send_voice_reply() -> bool:
+    """Return whether the bot should attempt an audio reply."""
+
+    return SETTINGS.bot_voice_reply_mode in {"audio", "auto"}
 
 
 def _log_agent_latencies(
