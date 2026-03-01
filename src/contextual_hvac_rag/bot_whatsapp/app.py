@@ -189,13 +189,19 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
             if result.conversation_id and not cache_hit and SETTINGS.bot_conversation_mode == "stateful":
                 STORE.set_conversation_id(message.wa_id, result.conversation_id)
 
-            reply_chunks = format_reply_chunks(
+            reply_segments = format_reply_chunks(
                 result.answer_text,
                 max_chars=SETTINGS.bot_reply_chunk_chars,
             )
-            if not reply_chunks:
-                reply_chunks = ["I could not generate a response for that request."]
-            formatted_reply = "\n\n".join(reply_chunks)
+            if not reply_segments:
+                reply_segments = ["I could not generate a response for that request."]
+            if len(reply_segments) > 1:
+                LOGGER.info(
+                    "Collapsing %s formatted reply segments into one WhatsApp message for %s",
+                    len(reply_segments),
+                    message.wa_id,
+                )
+            formatted_reply = "\n\n".join(reply_segments)
 
             log_path = append_agent_event_log(
                 settings=SETTINGS,
@@ -203,32 +209,24 @@ def process_inbound_messages(messages: list[InboundMessage]) -> None:
                 result=result,
                 formatted_reply=formatted_reply,
                 cache_hit=cache_hit,
-                reply_chunk_count=len(reply_chunks),
+                reply_chunk_count=1,
             )
             LOGGER.info(
                 "Stored WhatsApp agent event for %s at %s (cache_hit=%s, reply_chunks=%s, attributions=%s, retrieval_contents=%s)",
                 message.wa_id,
                 log_path,
                 cache_hit,
-                len(reply_chunks),
+                1,
                 len(result.attributions),
                 len(result.retrieval_contents),
             )
 
-            for chunk_index, reply_chunk in enumerate(reply_chunks, start=1):
-                if len(reply_chunks) > 1:
-                    LOGGER.info(
-                        "Sending WhatsApp reply chunk %s/%s to %s",
-                        chunk_index,
-                        len(reply_chunks),
-                        message.wa_id,
-                    )
-                WHATSAPP_API.send_text_reply(
-                    wa_id=message.wa_id,
-                    text=reply_chunk,
-                    trigger=to_inbound_trigger(message),
-                    store=STORE,
-                )
+            WHATSAPP_API.send_text_reply(
+                wa_id=message.wa_id,
+                text=formatted_reply,
+                trigger=to_inbound_trigger(message),
+                store=STORE,
+            )
         except GuardViolation as exc:
             LOGGER.warning("Blocked WhatsApp reply for %s: %s", message.wa_id, exc)
         except ContextualClientError as exc:

@@ -82,7 +82,7 @@ Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manu
 - `src/contextual_hvac_rag/metadata/`: PDF metadata extraction and metadata flattening.
 - `src/contextual_hvac_rag/ingest/`: unzip helper and PDF ingestion pipeline.
 - `src/contextual_hvac_rag/bot_whatsapp/`: FastAPI webhook, stores, guardrails, and Meta Cloud API sender.
-  - Replies are normalized into WhatsApp-friendly plain text and split into message-safe chunks before sending.
+  - Replies are normalized into WhatsApp-friendly plain text and sent as a single outbound WhatsApp message.
   - Bot memory can run `stateful` (conversation reuse) or `stateless` (lower latency, better cache reuse).
   - `BOT_RESPONSE_STYLE_PROMPT` is optional and should be left blank unless you have verified it does not reduce retrieval quality for your agent.
   - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.

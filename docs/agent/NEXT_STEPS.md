@@ -25,7 +25,7 @@
 - [x] Log and persist best-effort stage timings for the live bot query path.
 - [x] Make the bot memory mode configurable so it can run stateful or stateless.
 - [x] Prefer SQLite-backed local bot state in the env template for durable conversation continuity.
-- [x] Split long WhatsApp replies into multiple message-safe chunks.
+- [x] Keep outbound WhatsApp delivery to a single message while still normalizing long replies internally.
 - [x] Add compact retrieval previews to the bot logs for faster answer-quality debugging.
 - [x] Apply concise WhatsApp-oriented response guidance before querying the agent.
 - [x] Make the WhatsApp style prompt opt-in after confirming it can interfere with retrieval for some grounded queries.

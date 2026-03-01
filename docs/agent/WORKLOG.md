@@ -2,6 +2,7 @@
 
 ## 2026-02-27
 
+- Changed the WhatsApp reply path back to a single outbound message per user query, collapsing any internal formatting segments before sending.
 - Disabled the WhatsApp bot's style prompt by default after it was shown to interfere with grounded retrieval for otherwise valid datastore queries.
 - Added configurable stateful/stateless bot memory, SQLite-first local defaults, WhatsApp reply chunking, richer retrieval previews, and a concise-response style prompt for better latency and UX.
 - Added a bot-only direct ACL query mode, a short-lived per-user response cache, and structured live stage-timing logs to cut repeated-query latency.
