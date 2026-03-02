@@ -191,10 +191,6 @@ For local webhook testing, expose the app with a tunnel such as `ngrok`, then us
 - `GET /whatsapp/webhook` for verification
 - `POST /whatsapp/webhook` for inbound messages
 
-For a detailed Meta sandbox setup using the WhatsApp test number, see:
-
-- `docs/whatsapp_test_number_setup.md`
-
 ### Voice Support
 
 Voice support is optional and still best treated as an experimental path.
