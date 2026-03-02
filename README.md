@@ -1,195 +1,284 @@
 # Contextual HVAC Technical Docs RAG
 
-Production-ready Python 3.11+ scaffold for ingesting HVAC and technical PDF manuals into Contextual AI, with a WhatsApp-only inbound support bot built on Meta's official WhatsApp Cloud API.
+Python 3.11+ application for building and serving an HVAC technical-document question answering system on top of Contextual AI. It includes:
 
-## Quickstart
+- a local ingestion pipeline for PDF manuals
+- a WhatsApp bot using Meta's official WhatsApp Cloud API
+- an offline evaluation pipeline for golden-dataset testing
 
-1. Create and activate a Python 3.11+ virtual environment.
-2. Install dependencies:
+The repository is designed for local development first, with clean configuration, structured logging, and CLI workflows that are easy to run and extend.
 
-   ```bash
-   pip install -e ".[dev]"
-   ```
+## What This Project Does
 
-   Optional voice support dependencies:
+The system follows a standard retrieval-augmented generation (RAG) workflow:
 
-   ```bash
-   pip install -e ".[dev,voice]"
-   ```
+1. PDF manuals are ingested into a Contextual datastore.
+2. A Contextual agent queries that datastore to retrieve relevant passages.
+3. The agent generates a grounded answer using the retrieved content.
+4. The answer can be used through:
+   - a CLI workflow
+   - the WhatsApp bot
+   - the offline evaluation pipeline
 
-3. Copy `.env.example` to `.env` and fill in required values:
-
-   - `CONTEXTUAL_API_KEY`
-   - `CONTEXTUAL_DATASTORE_ID`
-   - optional `CONTEXTUAL_API_BASE` (defaults to `https://api.contextual.ai/v1`)
-4. Validate environment setup:
-
-   ```bash
-   contextual-hvac-rag validate-env
-   ```
-
-5. Run ingestion:
-
-   ```bash
-   contextual-hvac-rag ingest-pdfs --pdf-dir ./path/to/pdfs
-   ```
-
-6. Run the WhatsApp webhook app locally:
-
-   ```bash
-   uvicorn contextual_hvac_rag.bot_whatsapp.app:app --reload
-   ```
+In practical terms, this lets you ask questions such as service, maintenance, troubleshooting, and safety queries against your own HVAC manuals instead of relying on a general-purpose chatbot.
 
 ## Architecture
 
 ```text
-                +-----------------------+
-                |   Local PDF Corpus    |
-                |   ZIP / PDF folder    |
-                +-----------+-----------+
-                            |
-                            v
-               +------------+-------------+
-               |  Ingestion CLI (Typer)   |
-               | unzip + metadata + logs  |
-               +------------+-------------+
-                            |
-                            v
-               +------------+-------------+
-               | Contextual API Client    |
-               | datastore ingest         |
-               +------------+-------------+
-                            |
-                            v
-               +------------+-------------+
-               | Contextual Datastore     |
-               +------------+-------------+
-                            ^
-                            |
-       +--------------------+--------------------+
-       |                                         |
-       v                                         |
-+------+-----------------+           +-----------+-----------+
-| WhatsApp Cloud Webhook |           | Contextual Agent API  |
-| FastAPI + fee guards   +-----------> query + conversation  |
-+------+-----------------+           +-----------+-----------+
-       |                                         |
-       v                                         |
-+------+-----------------+                       |
-| WhatsApp Cloud API     |<----------------------+
-| inbound-only replies   |
-+------------------------+
+PDF ZIP / PDF Folder
+        |
+        v
+  Ingestion CLI
+  unzip + parse + upload
+        |
+        v
+Contextual Datastore
+        ^
+        |
+Contextual Agent API
+        ^
+        |
+FastAPI WhatsApp App  <---- Meta WhatsApp Webhook
+        |
+        v
+Meta WhatsApp Cloud API
 ```
 
-## Modules Overview
+## How The Main Flows Work
 
-- `src/contextual_hvac_rag/config.py`: environment-based settings via Pydantic.
-- `src/contextual_hvac_rag/contextual_client.py`: Contextual datastore ingest and agent query wrapper.
-- `src/contextual_hvac_rag/metadata/`: PDF metadata extraction and metadata flattening.
-- `src/contextual_hvac_rag/ingest/`: unzip helper and PDF ingestion pipeline.
-- `src/contextual_hvac_rag/bot_whatsapp/`: FastAPI webhook, stores, guardrails, and Meta Cloud API sender.
-  - Replies are normalized into WhatsApp-friendly plain text and sent as a single outbound WhatsApp message.
-  - Bot memory can run `stateful` (conversation reuse) or `stateless` (lower latency, better cache reuse).
-  - `BOT_RESPONSE_STYLE_PROMPT` is optional and should be left blank unless you have verified it does not reduce retrieval quality for your agent.
-  - Optional voice support is scaffolded behind `BOT_ENABLE_VOICE=false` and requires the voice extras plus `ffmpeg`.
-  - The current initial voice implementation supports inbound audio parsing, STT via `faster-whisper`, and safe text fallbacks if STT/TTS cannot complete.
-  - For faster voice replies, the `google_wavenet` TTS backend is available via Google Cloud Text-to-Speech. It requires `google-cloud-texttospeech`, application default credentials, and a valid WaveNet voice such as `en-IN-Wavenet-A`.
-  - Successful bot interactions are persisted to `./logs/whatsapp_agent_events.jsonl` for later evaluation.
-- `src/contextual_hvac_rag/cli.py`: Typer entry point.
-- `eval/`: golden-dataset evaluation docs and sample artifacts.
-- `docs/agent/`: source-of-truth docs for future agent-assisted changes.
+### 1. Ingestion
 
-## Local Run Instructions
+The ingestion flow builds the knowledge base.
 
-### Ingest a ZIP archive
+1. You point the CLI at a ZIP file or a directory of PDFs.
+2. The app extracts PDFs locally if needed.
+3. Each PDF is parsed with PyMuPDF.
+4. Metadata such as title, type, date, TOC pages, and index pages is extracted.
+5. Each PDF is uploaded to the Contextual datastore with `custom_metadata`.
+6. A JSONL log is written with one status record per file.
+
+This is the part that turns a folder of manuals into a searchable datastore.
+
+### 2. WhatsApp Bot
+
+The WhatsApp bot is a FastAPI service that receives inbound messages from Meta.
+
+A **webhook** is simply an HTTP endpoint that another system calls when an event happens. In this project:
+
+- a user sends a WhatsApp message
+- Meta sends an HTTP request to your app
+- your app processes the message and sends a reply
+
+There are two webhook routes:
+
+- `GET /whatsapp/webhook`
+  - used for Meta verification during setup
+- `POST /whatsapp/webhook`
+  - used for actual inbound message delivery
+
+For text messages, the bot:
+
+1. receives the inbound webhook
+2. parses the message
+3. checks the inbound-only guardrails
+4. queries the Contextual agent
+5. formats the answer for WhatsApp
+6. sends a reply through Meta Cloud API
+
+The bot is intentionally designed to only respond to inbound user messages and not send proactive messages.
+
+### 3. Evaluation
+
+The evaluation pipeline is an offline scoring workflow for a golden CSV.
+
+It:
+
+1. loads a CSV of test questions and expected sources
+2. queries the Contextual agent row by row
+3. normalizes retrieved results
+4. computes DOC-level and PAGE-level retrieval metrics
+5. writes per-query and summary output files
+
+This is the repeatable way to measure retrieval quality over time.
+
+## Repository Layout
+
+- `src/contextual_hvac_rag/config.py`
+  Environment-based settings.
+- `src/contextual_hvac_rag/contextual_client.py`
+  Contextual API wrapper for datastore ingestion and agent queries.
+- `src/contextual_hvac_rag/metadata/`
+  PDF metadata extraction and flattening.
+- `src/contextual_hvac_rag/ingest/`
+  ZIP extraction and bulk PDF ingestion.
+- `src/contextual_hvac_rag/bot_whatsapp/`
+  WhatsApp webhook app, Meta Cloud API client, stores, guards, formatting, and optional voice support.
+- `src/contextual_hvac_rag/eval/`
+  Offline evaluation loader, metrics, normalization, latency aggregation, and writers.
+- `eval/`
+  Evaluation documentation and local outputs.
+- `docs/`
+  Supporting operational notes such as WhatsApp test-number setup and implementation blueprints.
+
+## Quickstart
+
+1. Create and activate a Python 3.11+ virtual environment.
+
+2. Install the base dependencies:
 
 ```bash
-contextual-hvac-rag unzip-dataset --zip-path ./Eval_Dataset.zip --extract-dir ./data/eval_dataset
+pip install -e ".[dev]"
 ```
 
-### Ingest a PDF directory
+Optional voice dependencies:
 
 ```bash
-contextual-hvac-rag ingest-pdfs --pdf-dir ./data/manuals --source-label upload
+pip install -e ".[dev,voice]"
 ```
 
-### Start the webhook
+3. Copy `.env.example` to `.env` and fill in the required values.
+
+Minimum for ingestion:
+
+- `CONTEXTUAL_API_KEY`
+- `CONTEXTUAL_DATASTORE_ID`
+
+Additional values for the WhatsApp bot:
+
+- `CONTEXTUAL_AGENT_ID`
+- `WA_ACCESS_TOKEN`
+- `WA_PHONE_NUMBER_ID`
+- `WA_VERIFY_TOKEN`
+
+4. Validate the environment:
+
+```bash
+contextual-hvac-rag validate-env
+```
+
+## Ingestion Commands
+
+Extract a ZIP dataset:
+
+```bash
+contextual-hvac-rag unzip-dataset --zip-path ./Eval_Dataset.zip --extract-dir ./data/pdfs
+```
+
+Ingest a directory of PDFs:
+
+```bash
+contextual-hvac-rag ingest-pdfs --pdf-dir ./data/pdfs --source-label upload
+```
+
+The ingestion run writes a JSONL log under `./logs/`.
+
+## WhatsApp Bot Setup
+
+Start the FastAPI app:
 
 ```bash
 uvicorn contextual_hvac_rag.bot_whatsapp.app:app --host 0.0.0.0 --port 8000
 ```
 
-Configure your Meta webhook verification callback to `GET /whatsapp/webhook` and message delivery to `POST /whatsapp/webhook`.
-
-Validate local bot readiness before configuring Meta:
+Health check:
 
 ```bash
 curl http://127.0.0.1:8000/healthz
 ```
 
-The provided `.env.example` now defaults to `BOT_STORE_BACKEND=sqlite` so conversation memory survives local restarts.
+For local webhook testing, expose the app with a tunnel such as `ngrok`, then use:
 
-For a step-by-step Meta sandbox setup using the WhatsApp test number, see `docs/whatsapp_test_number_setup.md`.
+- `GET /whatsapp/webhook` for verification
+- `POST /whatsapp/webhook` for inbound messages
 
-### Run the evaluation pipeline
+For a detailed Meta sandbox setup using the WhatsApp test number, see:
+
+- `docs/whatsapp_test_number_setup.md`
+
+### Voice Support
+
+Voice support is optional and still best treated as an experimental path.
+
+Current voice path:
+
+- inbound audio can be transcribed with `faster-whisper`
+- the transcribed text is sent to the Contextual agent
+- the reply can be synthesized to audio and sent back as a WhatsApp voice note
+
+Available TTS backends:
+
+- `google_wavenet`
+  - faster managed TTS via Google Cloud Text-to-Speech
+- `indic_parler`
+  - local model-based TTS, slower on CPU
+
+For faster voice replies, `google_wavenet` is the practical option, but it requires Google Cloud credentials and the Text-to-Speech API to be enabled.
+
+## Evaluation Pipeline
+
+Run the evaluator:
 
 ```bash
 contextual-hvac-rag eval --input ./eval/golden.csv --out ./eval/results --top-k 10
 ```
 
-## Troubleshooting
-
-- `validate-env` reports missing variables: update `.env` and restart the shell.
-- PDF parsing fails on some manuals: confirm the files are valid PDFs and retry; ingestion continues per-file on errors.
-- WhatsApp replies are blocked: the fee guard only allows replies in direct response to inbound user messages.
-- Webhook verification fails: ensure `WA_VERIFY_TOKEN` matches the token configured in the Meta developer console.
-- SQLite store path errors: create the parent directory or set `BOT_SQLITE_PATH` to a writable location.
-- `/healthz` shows `*_configured: false`: fill in the missing WhatsApp or Contextual bot variables in `.env` and restart the app.
-- Cache hits are not happening: the cache is only active in `BOT_CONVERSATION_MODE=stateless`, and repeated questions must arrive before `BOT_RESPONSE_CACHE_TTL_SECONDS` expires.
-- Check `./logs/whatsapp_agent_events.jsonl` to inspect stored `attributions` and `retrieval_contents` for later evaluation or debugging.
-
-## Migration Notes From Colab To Local
-
-- Changed: `google.colab.files.upload()` is removed. Use `--zip-path` and `--extract-dir` for local ZIP extraction, or `--pdf-dir` when PDFs are already extracted.
-- Changed: hardcoded Contextual credentials are removed. Use `.env` or exported environment variables.
-- Stayed the same: PDF metadata heuristics are preserved, including SHA-256 document ids, TOC dot-leader detection, back-page index scanning, and contact/imprint false-positive filtering.
-- Stayed the same: each PDF is uploaded with `custom_metadata` in the Contextual ingest request.
-- Local run path: unzip first if needed, then run `ingest-pdfs`, and inspect the JSONL log written under `./logs`.
-
-## Safety / Secrets
-
-- Never commit `.env` or real API keys.
-- If any key is exposed, rotate it immediately in the relevant provider console.
-- Use distinct credentials for local development and production.
-
-## Deployment Note
-
-Two supported paths:
-
-1. Local development: run FastAPI locally and expose it with `ngrok` or `cloudflared` for webhook testing.
-2. Cloud deployment later: deploy the FastAPI app to a managed service and keep the same webhook contract.
-
-This repository does not implement deployment infrastructure yet.
-
-## Agent Workflow
-
-- When asking an LLM agent to make changes, paste `docs/agent/AGENT_CONTEXT.md` at the top of the prompt.
-- Whenever a non-trivial feature is completed, update `docs/agent/WORKLOG.md` and `docs/agent/NEXT_STEPS.md` in the same commit or PR.
-- Every meaningful change should follow the commit prefixes: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`.
-
-## Git Workflow
-
-For any meaningful multi-file change, the agent should provide these exact commands and should never claim it already pushed:
+Quick smoke test on a subset:
 
 ```bash
-git status
-git add <paths>
-git commit -m "<type>(<scope>): message"
-git push
+contextual-hvac-rag eval --input ./eval/golden.csv --out ./eval/results_smoke --top-k 10 --limit 5
 ```
 
-## Next Steps
+Outputs:
 
-- Build the structured evaluation pipeline around JSONL golden datasets.
-- Add deployment manifests once hosting is chosen.
-- Add integration tests against a staging Contextual datastore and WhatsApp sandbox.
+- `per_query_results.jsonl`
+- `summary.json`
+
+The evaluator supports missing gold fields and skips scoring when a row does not contain enough gold data.
+
+## Configuration Notes
+
+Important runtime controls include:
+
+- `BOT_CONVERSATION_MODE`
+  - `stateful` for follow-up memory
+  - `stateless` for lower latency and better cache reuse
+- `BOT_RESPONSE_CACHE_TTL_SECONDS`
+  - enables short-lived repeat-question caching in stateless mode
+- `BOT_ENABLE_VOICE`
+  - enables inbound audio processing
+- `BOT_TTS_DEFAULT_BACKEND`
+  - choose the outbound voice backend
+
+## Troubleshooting
+
+- `validate-env` reports missing variables
+  - update `.env` and restart the shell
+- webhook verification fails
+  - make sure `WA_VERIFY_TOKEN` matches the value configured in Meta
+- WhatsApp replies are blocked
+  - the bot only replies to inbound user messages
+- cache is not being used
+  - cache is only active in `BOT_CONVERSATION_MODE=stateless`
+- voice replies are slow
+  - long replies are expensive to synthesize; managed TTS is faster than local CPU models
+- PDF ingestion fails for some files
+  - the ingest loop continues; inspect the JSONL log in `./logs/`
+
+## Security
+
+- Never commit `.env` or any real credentials.
+- Rotate keys immediately if they are exposed.
+- Use separate credentials for local development and deployed environments.
+
+## Deployment
+
+This repository is set up for local development and testing first.
+
+Common progression:
+
+1. run FastAPI locally
+2. expose it with `ngrok` or `cloudflared`
+3. validate the WhatsApp webhook flow
+4. move the app to a cloud host later if you need stable uptime and lower webhook friction
+
+Deployment manifests are not included yet.
