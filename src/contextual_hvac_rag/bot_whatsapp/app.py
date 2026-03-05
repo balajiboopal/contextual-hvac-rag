@@ -215,12 +215,14 @@ def _query_text_request(
     *,
     wa_id: str,
     user_text: str,
+    response_language: str | None = None,
 ) -> tuple[AgentQueryResult, bool]:
     """Query Contextual for a user text request, optionally using the cache."""
 
     conversation_id = _get_conversation_id_for_message(wa_id)
     cache_enabled = _is_cache_enabled()
-    cache_key = build_cache_key(wa_id=wa_id, text=user_text) if cache_enabled else ""
+    cache_text = user_text if response_language is None else f"{user_text}\n__response_language={response_language}"
+    cache_key = build_cache_key(wa_id=wa_id, text=cache_text) if cache_enabled else ""
     cache_started_at = time.perf_counter()
     cached_response = RESPONSE_CACHE.get(cache_key) if cache_enabled else None
     cache_hit = cached_response is not None
@@ -237,10 +239,14 @@ def _query_text_request(
         )
         return result, True
 
+    system_prompt = _build_system_prompt(
+        base_prompt=SETTINGS.bot_response_style_prompt,
+        response_language=response_language,
+    )
     result = CONTEXTUAL_CLIENT.query_agent(
         message=user_text,
         conversation_id=conversation_id,
-        system_prompt=SETTINGS.bot_response_style_prompt,
+        system_prompt=system_prompt,
     )
     if cache_enabled and result.answer_text.strip():
         RESPONSE_CACHE.set(
@@ -298,6 +304,7 @@ def _process_audio_message(message: InboundMessage) -> None:
         result, cache_hit = _query_text_request(
             wa_id=message.wa_id,
             user_text=transcription.retrieval_text,
+            response_language=transcription.language,
         )
         _log_retrieval_preview(
             wa_id=message.wa_id,
@@ -578,3 +585,39 @@ def _extract_retrieval_filename(item: dict[str, object]) -> str:
         return content_id
 
     return "unknown"
+
+
+def _build_system_prompt(*, base_prompt: str, response_language: str | None) -> str:
+    """Build a merged system prompt with an optional forced response language."""
+
+    prompt_parts: list[str] = []
+    base_clean = base_prompt.strip()
+    if base_clean:
+        prompt_parts.append(base_clean)
+
+    if response_language and not response_language.casefold().startswith("en"):
+        language_label = _language_label_from_code(response_language)
+        prompt_parts.append(
+            f"Answer in {language_label} only. Do not switch to English unless the user explicitly asks for English."
+        )
+
+    return "\n\n".join(prompt_parts).strip()
+
+
+def _language_label_from_code(language_code: str) -> str:
+    """Return a user-friendly language name from a short language code."""
+
+    normalized = language_code.strip().casefold()
+    mapping = {
+        "bn": "Bengali",
+        "en": "English",
+        "gu": "Gujarati",
+        "hi": "Hindi",
+        "kn": "Kannada",
+        "ml": "Malayalam",
+        "mr": "Marathi",
+        "ta": "Tamil",
+        "te": "Telugu",
+        "ur": "Urdu",
+    }
+    return mapping.get(normalized, normalized)
