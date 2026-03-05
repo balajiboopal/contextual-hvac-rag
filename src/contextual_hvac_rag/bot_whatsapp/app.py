@@ -318,10 +318,15 @@ def _process_audio_message(message: InboundMessage) -> None:
             transcription.translation_latency_ms,
         )
 
+        response_language = (
+            None
+            if SETTINGS.bot_voice_translate_reply_for_tts
+            else transcription.language
+        )
         result, cache_hit = _query_text_request(
             wa_id=message.wa_id,
             user_text=transcription.retrieval_text,
-            response_language=transcription.language,
+            response_language=response_language,
         )
         _log_retrieval_preview(
             wa_id=message.wa_id,
