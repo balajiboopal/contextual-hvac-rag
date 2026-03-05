@@ -243,11 +243,28 @@ def _query_text_request(
         base_prompt=SETTINGS.bot_response_style_prompt,
         response_language=response_language,
     )
-    result = CONTEXTUAL_CLIENT.query_agent(
-        message=user_text,
-        conversation_id=conversation_id,
-        system_prompt=system_prompt,
-    )
+    try:
+        result = CONTEXTUAL_CLIENT.query_agent(
+            message=user_text,
+            conversation_id=conversation_id,
+            system_prompt=system_prompt,
+        )
+    except ContextualClientError:
+        if (
+            response_language is None
+            or response_language.casefold().startswith("en")
+            or not system_prompt
+        ):
+            raise
+        LOGGER.warning(
+            "Language-constrained query timed out for %s; retrying without language constraint.",
+            wa_id,
+        )
+        result = CONTEXTUAL_CLIENT.query_agent(
+            message=user_text,
+            conversation_id=conversation_id,
+            system_prompt=SETTINGS.bot_response_style_prompt,
+        )
     if cache_enabled and result.answer_text.strip():
         RESPONSE_CACHE.set(
             cache_key,
