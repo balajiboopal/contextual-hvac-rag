@@ -33,6 +33,7 @@ dev = [
 ]
 voice = [
   "faster-whisper>=1.1,<2.0",
+  "google-cloud-translate>=3.15,<4.0",
   "google-cloud-texttospeech>=2.25,<3.0",
   "soundfile>=0.12,<1.0",
   "transformers>=4.46,<5.0",
