@@ -286,16 +286,18 @@ def _process_audio_message(message: InboundMessage) -> None:
             return
 
         LOGGER.info(
-            "Transcribed WhatsApp audio for %s in %.2f ms (language=%s, chars=%s)",
+            "Transcribed WhatsApp audio for %s in %.2f ms (language=%s, chars=%s, translated_chars=%s, translation_ms=%s)",
             message.wa_id,
             transcription.latency_ms,
             transcription.language or "unknown",
             len(transcription.text),
+            len(transcription.translated_text or ""),
+            transcription.translation_latency_ms,
         )
 
         result, cache_hit = _query_text_request(
             wa_id=message.wa_id,
-            user_text=transcription.text,
+            user_text=transcription.retrieval_text,
         )
         _log_retrieval_preview(
             wa_id=message.wa_id,
@@ -334,6 +336,7 @@ def _process_audio_message(message: InboundMessage) -> None:
                     cache_hit=cache_hit,
                     reply_chunk_count=1,
                     user_text_override=transcription.text,
+                    retrieval_query_text=transcription.retrieval_text,
                     reply_mode="audio",
                     detected_language=transcription.language,
                 )
@@ -366,6 +369,7 @@ def _process_audio_message(message: InboundMessage) -> None:
             result=result,
             cache_hit=cache_hit,
             user_text=transcription.text,
+            retrieval_query_text=transcription.retrieval_text,
             detected_language=transcription.language,
             already_logged=True,
         )
@@ -379,6 +383,7 @@ def _log_and_send_text_reply(
     result: AgentQueryResult,
     cache_hit: bool,
     user_text: str,
+    retrieval_query_text: str | None = None,
     detected_language: str | None = None,
     already_logged: bool = False,
 ) -> None:
@@ -411,6 +416,7 @@ def _log_and_send_text_reply(
         cache_hit=cache_hit,
         reply_chunk_count=1,
         user_text_override=user_text,
+        retrieval_query_text=retrieval_query_text if retrieval_query_text is not None else user_text,
         reply_mode="text",
         detected_language=detected_language,
     )

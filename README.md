@@ -242,6 +242,8 @@ Important runtime controls include:
   - enables short-lived repeat-question caching in stateless mode
 - `BOT_ENABLE_VOICE`
   - enables inbound audio processing
+- `BOT_VOICE_TRANSLATE_TO_ENGLISH`
+  - when `true`, non-English voice notes are translated to English for retrieval while keeping the original transcript in logs
 - `BOT_TTS_DEFAULT_BACKEND`
   - choose the outbound voice backend
 

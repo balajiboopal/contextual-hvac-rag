@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     bot_stt_model_size: str = "small"
     bot_stt_device: str = "cpu"
     bot_stt_compute_type: str = "int8"
+    bot_voice_translate_to_english: bool = True
     bot_tts_default_backend: Literal["indic_tts", "indic_parler", "google_wavenet"] = "indic_tts"
     bot_tts_fallback_backend: Literal["indic_tts", "indic_parler", "google_wavenet"] = "indic_parler"
     google_tts_language_code: str = ""

@@ -27,5 +27,6 @@ def test_bot_defaults_favor_sqlite_and_stateful_memory() -> None:
     assert settings.bot_response_style_prompt == ""
     assert settings.bot_enable_voice is False
     assert settings.bot_voice_reply_mode == "audio"
+    assert settings.bot_voice_translate_to_english is True
     assert settings.bot_tts_default_backend == "indic_tts"
     assert settings.google_tts_language_code == ""

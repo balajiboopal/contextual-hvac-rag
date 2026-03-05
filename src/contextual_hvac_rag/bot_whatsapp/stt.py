@@ -21,6 +21,9 @@ class TranscriptionResult:
     text: str
     language: str | None
     latency_ms: float
+    retrieval_text: str
+    translated_text: str | None = None
+    translation_latency_ms: float | None = None
 
 
 class FasterWhisperTranscriber:
@@ -35,22 +38,68 @@ class FasterWhisperTranscriber:
 
         started_at = time.perf_counter()
         model = self._load_model()
-        try:
-            segments, info = model.transcribe(
-                str(audio_path),
-                beam_size=1,
-                vad_filter=True,
-            )
-        except Exception as exc:  # noqa: BLE001
-            raise VoiceProcessingError(f"Voice transcription failed: {exc}") from exc
-
+        segments, info = self._run_transcribe(model=model, audio_path=audio_path, task="transcribe")
         text_parts = [segment.text.strip() for segment in segments if segment.text.strip()]
-        language = getattr(info, "language", None)
+        original_text = " ".join(text_parts).strip()
+        language_raw = getattr(info, "language", None)
+        language = language_raw if isinstance(language_raw, str) and language_raw.strip() else None
+
+        retrieval_text = original_text
+        translated_text: str | None = None
+        translation_latency_ms: float | None = None
+        if (
+            self._settings.bot_voice_translate_to_english
+            and language is not None
+            and not language.casefold().startswith("en")
+        ):
+            translate_started_at = time.perf_counter()
+            translated_segments, _ = self._run_transcribe(
+                model=model,
+                audio_path=audio_path,
+                task="translate",
+                language=language,
+            )
+            translated_parts = [
+                segment.text.strip()
+                for segment in translated_segments
+                if segment.text.strip()
+            ]
+            translated_text = " ".join(translated_parts).strip()
+            translation_latency_ms = (time.perf_counter() - translate_started_at) * 1000.0
+            if translated_text:
+                retrieval_text = translated_text
+
         return TranscriptionResult(
-            text=" ".join(text_parts).strip(),
-            language=language if isinstance(language, str) and language.strip() else None,
+            text=original_text,
+            retrieval_text=retrieval_text,
+            translated_text=translated_text,
+            language=language,
             latency_ms=(time.perf_counter() - started_at) * 1000.0,
+            translation_latency_ms=translation_latency_ms,
         )
+
+    def _run_transcribe(
+        self,
+        *,
+        model: Any,
+        audio_path: Path,
+        task: str,
+        language: str | None = None,
+    ) -> tuple[Any, Any]:
+        """Execute a faster-whisper transcription task and return raw segments/info."""
+
+        try:
+            kwargs: dict[str, object] = {
+                "beam_size": 1,
+                "vad_filter": True,
+                "task": task,
+            }
+            if language:
+                kwargs["language"] = language
+            segments, info = model.transcribe(str(audio_path), **kwargs)
+            return segments, info
+        except Exception as exc:  # noqa: BLE001
+            raise VoiceProcessingError(f"Voice transcription failed ({task}): {exc}") from exc
 
     def _load_model(self) -> Any:
         if self._model is not None:
