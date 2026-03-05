@@ -193,13 +193,15 @@ For local webhook testing, expose the app with a tunnel such as `ngrok`, then us
 
 ### Voice Support
 
-Voice support is optional and still best treated as an experimental path.
+Voice support is optional and should be treated as a practical add-on, not the primary interface.
 
-Current voice path:
+Current voice path in this repo:
 
-- inbound audio can be transcribed with `faster-whisper`
-- the transcribed text is sent to the Contextual agent
-- the reply can be synthesized to audio and sent back as a WhatsApp voice note
+1. inbound audio is transcribed with `faster-whisper`
+2. if the detected language is non-English, transcription is translated to English for retrieval
+3. Contextual is queried with that retrieval text
+4. for voice replies, answer text is translated back to the detected language (when enabled)
+5. audio is synthesized and sent back as a WhatsApp voice note
 
 Available TTS backends:
 
@@ -208,7 +210,19 @@ Available TTS backends:
 - `indic_parler`
   - local model-based TTS, slower on CPU
 
-For faster voice replies, `google_wavenet` is the practical option, but it requires Google Cloud credentials and the Text-to-Speech API to be enabled.
+For faster voice replies, `google_wavenet` is the practical option. It requires:
+
+- Google Cloud Text-to-Speech API enabled
+- Google Cloud Translation API enabled (if reply translation is turned on)
+- Application Default Credentials configured on the host running the bot
+
+Quick setup example:
+
+```bash
+gcloud config set project <your-project-id>
+gcloud services enable texttospeech.googleapis.com translate.googleapis.com
+gcloud auth application-default login
+```
 
 ## Evaluation Pipeline
 
@@ -244,6 +258,8 @@ Important runtime controls include:
   - enables inbound audio processing
 - `BOT_VOICE_TRANSLATE_TO_ENGLISH`
   - when `true`, non-English voice notes are translated to English for retrieval while keeping the original transcript in logs
+- `BOT_VOICE_TRANSLATE_REPLY_FOR_TTS`
+  - when `true`, the English agent answer is translated to the detected user language before TTS
 - `BOT_TTS_DEFAULT_BACKEND`
   - choose the outbound voice backend
 
@@ -259,6 +275,10 @@ Important runtime controls include:
   - cache is only active in `BOT_CONVERSATION_MODE=stateless`
 - voice replies are slow
   - long replies are expensive to synthesize; managed TTS is faster than local CPU models
+- inbound audio gets text reply instead of audio
+  - this is an intentional fallback when any voice step fails (TTS, ffmpeg conversion, media upload/send)
+  - check bot logs for: `Falling back to text reply ... after voice synthesis failure: ...`
+  - verify Google APIs + ADC are configured if you use `google_wavenet`
 - PDF ingestion fails for some files
   - the ingest loop continues; inspect the JSONL log in `./logs/`
 
